@@ -104,15 +104,16 @@
 
 ### 项目结构
 ```
-ruoyi/
+/RuoY
 ├── ruoyi-admin          # 后台服务端
 ├── ruoyi-common         # 通用模块
 ├── ruoyi-framework      # 核心框架
 ├── ruoyi-generator      # 代码生成器
 ├── ruoyi-quartz         # 定时任务
 ├── ruoyi-system         # 系统模块
-├── ruoyi-ui             # 前端界面
 └── sql/                 # 数据库脚本
+
+/RuoYi-Vue3              # 前端界面
 ```
 
 ### 新增模块
