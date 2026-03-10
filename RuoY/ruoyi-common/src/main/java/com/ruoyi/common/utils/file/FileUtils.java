@@ -4,18 +4,31 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
 import com.ruoyi.common.config.RuoYiConfig;
 import com.ruoyi.common.constant.Constants;
+import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.common.utils.uuid.IdUtils;
@@ -299,5 +312,135 @@ public class FileUtils
         }
         String baseName = FilenameUtils.getBaseName(fileName);
         return baseName;
+    }
+
+    public static List<Map<String, Object>> previewExcel(String filePath)
+    {
+        File file = new File(filePath);
+        if (!file.exists())
+        {
+            throw new ServiceException("文件不存在");
+        }
+
+        String lowerName = file.getName().toLowerCase();
+        if (lowerName.endsWith(".csv"))
+        {
+            return previewCsv(file);
+        }
+
+        try (FileInputStream fis = new FileInputStream(file); Workbook workbook = WorkbookFactory.create(fis))
+        {
+            Sheet sheet = workbook.getSheetAt(0);
+            List<Map<String, Object>> data = new ArrayList<>();
+
+            for (int rowIdx = 0; rowIdx <= sheet.getLastRowNum(); rowIdx++)
+            {
+                Row row = sheet.getRow(rowIdx);
+                if (row == null)
+                {
+                    continue;
+                }
+
+                Map<String, Object> rowData = new LinkedHashMap<>();
+                for (int colIdx = 0; colIdx < row.getLastCellNum(); colIdx++)
+                {
+                    Cell cell = row.getCell(colIdx);
+                    rowData.put("col_" + colIdx, getCellValue(cell));
+                }
+                data.add(rowData);
+            }
+            return data;
+        }
+        catch (Exception e)
+        {
+            throw new ServiceException("Preview failed: " + e.getMessage());
+        }
+    }
+
+    private static List<Map<String, Object>> previewCsv(File file)
+    {
+        List<Map<String, Object>> data = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)))
+        {
+            String line;
+            while ((line = reader.readLine()) != null)
+            {
+                List<String> cells = parseCsvLine(line);
+                Map<String, Object> rowData = new LinkedHashMap<>();
+                for (int colIdx = 0; colIdx < cells.size(); colIdx++)
+                {
+                    rowData.put("col_" + colIdx, cells.get(colIdx));
+                }
+                data.add(rowData);
+            }
+            return data;
+        }
+        catch (Exception e)
+        {
+            throw new ServiceException("预览失败：" + e.getMessage());
+        }
+    }
+
+    private static List<String> parseCsvLine(String line)
+    {
+        List<String> cells = new ArrayList<>();
+        if (line == null)
+        {
+            return cells;
+        }
+
+        StringBuilder current = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < line.length(); i++)
+        {
+            char ch = line.charAt(i);
+            if (ch == '"')
+            {
+                if (inQuotes && i + 1 < line.length() && line.charAt(i + 1) == '"')
+                {
+                    current.append('"');
+                    i++;
+                }
+                else
+                {
+                    inQuotes = !inQuotes;
+                }
+            }
+            else if (ch == ',' && !inQuotes)
+            {
+                cells.add(current.toString());
+                current.setLength(0);
+            }
+            else
+            {
+                current.append(ch);
+            }
+        }
+        cells.add(current.toString());
+        return cells;
+    }
+
+    private static String getCellValue(Cell cell)
+    {
+        if (cell == null)
+        {
+            return "";
+        }
+        switch (cell.getCellType())
+        {
+            case STRING:
+                return cell.getStringCellValue();
+            case NUMERIC:
+                if (DateUtil.isCellDateFormatted(cell))
+                {
+                    return cell.getDateCellValue().toString();
+                }
+                return String.valueOf(cell.getNumericCellValue());
+            case BOOLEAN:
+                return String.valueOf(cell.getBooleanCellValue());
+            default:
+                return "";
+        }
     }
 }

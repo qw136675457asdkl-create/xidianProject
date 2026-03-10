@@ -131,7 +131,8 @@ public class FileUploadUtils
 
         assertAllowed(file, allowedExtension);
 
-        String fileName = useCustomNaming ? uuidFilename(file) : extractFilename(file);
+        //String fileName = useCustomNaming ? uuidFilename(file) : extractFilename(file);
+        String fileName = useCustomNaming ? uuidFilename(file) : StringUtils.format("{}.{}", FilenameUtils.getBaseName(file.getOriginalFilename()), getExtension(file));
 
         String absPath = getAbsoluteFile(baseDir, fileName).getAbsolutePath();
         file.transferTo(Paths.get(absPath));
@@ -156,7 +157,7 @@ public class FileUploadUtils
 
     public static final File getAbsoluteFile(String uploadDir, String fileName) throws IOException
     {
-        File desc = new File(uploadDir + File.separator + fileName);
+        File desc = new File(defaultBaseDir+uploadDir + File.separator + fileName);
 
         if (!desc.exists())
         {

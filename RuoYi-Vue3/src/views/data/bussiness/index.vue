@@ -1,4 +1,4 @@
-<template>
+﻿<template>
     <div class="app-container">
         <splitpanes :horizontal="appStore.device === 'mobile'" class="default-theme">
             <!-- 左侧菜单栏 试验信息树形表 -->
@@ -39,6 +39,9 @@
                                 <el-option label="模拟" :value="false" />
                             </el-select>
                         </el-form-item>
+                        <el-form-item label="数据状态" prop="workStatus">
+                            <el-input v-model="queryParams.workStatus" placeholder="请输入数据状态" clearable style="width: 200px" @keyup.enter="handleQuery" />
+                        </el-form-item>
                         <el-form-item label="创建时间" style="width: 308px">
                             <el-date-picker
                                 v-model="dateRange"
@@ -48,9 +51,6 @@
                                 start-placeholder="开始日期"
                                 end-placeholder="结束日期"
                             />
-                        </el-form-item>
-                        <el-form-item label="数据状态" prop="workStatus">
-                            <el-input v-model="queryParams.workStatus" placeholder="请输入数据状态" clearable style="width: 200px" @keyup.enter="handleQuery" />
                         </el-form-item>
                     </el-form>
                     <el-row :gutter="10" v-show="showSearch" style="margin-bottom: 10px;">
@@ -77,14 +77,6 @@
                             icon="Download"
                             @click="handleExportData"
                             >导出</el-button>
-                        </el-col>
-                        <el-col :span="1.5">
-                            <el-button
-                            type="info"
-                            plain
-                            icon="Edit"
-                            @click="handleRename"
-                            >重命名</el-button>
                         </el-col>
                         <el-col :span="1.5">
                             <el-button
@@ -182,6 +174,11 @@
                             </el-select>
                         </el-form-item>
                     </el-col>
+                    <el-col :span="12">
+                        <el-form-item label="文件名称" prop="fileName" v-if="title === '修改数据'">
+                            <el-input v-model="form.fileName" placeholder="请输入文件名称" />
+                        </el-form-item>
+                    </el-col>
                 </el-row>
 
                 <!-- 只读字段 -->
@@ -264,6 +261,7 @@
                     <el-col :span="12">
                         <el-form-item label="ID">{{ form.id }}</el-form-item>
                         <el-form-item label="数据名称">{{ form.dataName }}</el-form-item>
+                        <el-form-item label="文件名称">{{ form.fileName }}</el-form-item>
                         <el-form-item label="是否模拟">
                             <span v-if="form.isSimulation === true">真实数据</span>
                             <span v-else-if="form.isSimulation === false">模拟数据</span>
@@ -292,61 +290,6 @@
             <template #footer>
                 <div class="dialog-footer">
                     <el-button @click="openView = false">关 闭</el-button>
-                </div>
-            </template>
-        </el-dialog>
-
-        <!-- 新增试验对话框 -->
-        <el-dialog :title="addExperimentitle" v-model="openExperiment" width="500px" append-to-body>
-            <el-form ref="infoRef" :model="experimentform" :rules="experimentRules" label-width="80px">
-                <el-form-item label="编号" prop="id">
-                    <el-input v-model="experimentform.id" placeholder="自动生成编号" disabled />
-                </el-form-item>
-                <el-form-item label="名称" prop="name">
-                <el-input v-model="experimentform.name" placeholder="请输入名称" @blur="handleGeneratePath" />
-                </el-form-item>
-                <el-form-item label="所属项目" prop="parentId">
-                <el-select v-model="experimentform.parentId" placeholder="请选择所属项目" filterable clearable>
-                    <el-option
-                    v-for="item in projectOptions"
-                    :key="item.projectId"
-                    :label="item.projectName"
-                    :value="item.projectId"
-                    />
-                </el-select>
-                </el-form-item>
-            <el-form-item label="试验目标" prop="targetId">
-                <el-select v-model="experimentform.targetId" placeholder="请选择试验目标">
-                    <el-option
-                    v-for="item in targetTypeOptions"
-                    :key="item.targetId"
-                    :label="item.targetType"
-                    :value="item.targetId"
-                    />
-                </el-select>
-            </el-form-item>
-            <el-form-item label="试验日期" prop="startTime">
-            <el-date-picker clearable
-                v-model="experimentform.startTime"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="选择开始日期">
-            </el-date-picker>
-            </el-form-item>
-            <el-form-item label="试验地点" prop="location">
-            <el-input v-model="experimentform.location" placeholder="请输入地点" />
-            </el-form-item>
-            <el-form-item label="内容描述" prop="contentDesc">
-            <el-input v-model="experimentform.contentDesc" type="textarea" placeholder="请输入内容" />
-            </el-form-item>
-            <el-form-item label="路径" prop="path">
-            <el-input v-model="experimentform.path" placeholder="自动生成路径" disabled />
-            </el-form-item>
-            </el-form>
-            <template #footer>
-                <div class="dialog-footer">
-                <el-button type="primary" @click="submitaddExperimentForm">确 定</el-button>
-                <el-button @click="cancel">取 消</el-button>
                 </div>
             </template>
         </el-dialog>
@@ -413,44 +356,6 @@
                     </el-row>
                 </el-form>
 
-                <!-- 路径导航和操作栏 - 统一高度对齐 -->
-                <div class="import-path-bar">
-                    <el-input v-model="currentPath" placeholder="输入文件夹路径" clearable @keyup.enter="loadFileList" class="import-path-input">
-                        <template #append>
-                            <el-button type="primary" @click="loadFileList">打开</el-button>
-                        </template>
-                    </el-input>
-                    <div class="import-path-actions">
-                        <el-button icon="ArrowUp" @click="handleGoUp" :disabled="currentPath === INITIAL_PATH">返回上级</el-button>
-                        <el-button @click="handleNewFolder">新建文件夹</el-button>
-                        <el-button @click="handleRefresh">刷新</el-button>
-                    </div>
-                </div>
-
-                <!-- 文件列表 -->
-                <el-table :data="fileList" v-loading="fileLoading" stripe class="import-file-table" height="220">
-                    <el-table-column label="文件名" width="300" prop="name">
-                        <template #default="{ row }">
-                            <el-icon v-if="row.isDir" style="margin-right: 8px;"><el-icon-folder /></el-icon>
-                            <el-icon v-else style="margin-right: 8px;"><el-icon-document /></el-icon>
-                            <el-link type="primary" :underline="false" @click="handleFileOpen(row)">{{ row.name }}</el-link>
-                        </template>
-                    </el-table-column>
-                    <el-table-column label="大小" width="100" prop="size">
-                        <template #default="{ row }">{{ formatSize(row.size) }}</template>
-                    </el-table-column>
-                    <el-table-column label="修改时间" width="180" prop="modified">
-                        <template #default="{ row }">{{ formatDate(row.modified) }}</template>
-                    </el-table-column>
-                    <el-table-column label="操作" width="200">
-                        <template #default="{ row }">
-                            <el-button link type="primary" size="small" @click="handleFilePreview(row)">预览</el-button>
-                            <el-button link type="primary" size="small" @click="handleFileRename(row)">重命名</el-button>
-                            <el-button link type="danger" size="small" @click="handleFileDelete(row)">删除</el-button>
-                        </template>
-                    </el-table-column>
-                </el-table>
-
                 <!-- 文件上传 -->
                 <el-divider>选择文件上传至当前文件夹</el-divider>
                 <el-upload drag action="" :auto-upload="false" :on-change="handleFileSelect" v-model:file-list="uploadFiles" class="import-upload">
@@ -476,7 +381,20 @@
         <!-- 业务数据详情 (文件预览) 对话框 -->
         <el-dialog v-model="detailVisible" :title="detailTitle" width="70%" append-to-body>
             <div v-if="detailFile">
-                <component :is="detailPreviewComponent" :file="detailFileInfo" />
+                <!-- CSV文件特殊处理 -->
+                <div v-if="detailFile.name.toLowerCase().endsWith('.csv') && detailFileInfo.isCsv">
+                    <el-table :data="detailFileInfo.csvData" border stripe height="500">
+                        <el-table-column 
+                            v-for="(header, index) in Object.keys(detailFileInfo.csvData[0] || {})" 
+                            :key="index"
+                            :prop="header"
+                            :label="header"
+                            show-overflow-tooltip
+                        />
+                    </el-table>
+                </div>
+                <!-- 其他文件类型使用原有预览组件 -->
+                <component v-else :is="detailPreviewComponent" :file="detailFileInfo" />
             </div>
             <el-empty v-else description="暂无文件信息或路径无效" />
             <template #footer>
@@ -484,15 +402,6 @@
                     <el-button type="primary" @click="handleDownloadDetailFile" v-if="detailFile">下 载</el-button>
                     <el-button @click="detailVisible = false">关 闭</el-button>
                 </div>
-            </template>
-        </el-dialog>
-
-        <!-- 重命名对话框 -->
-        <el-dialog v-model="renameVisible" title="重命名" width="40%" append-to-body>
-            <el-input v-model="newFileName" placeholder="输入新文件名" />
-            <template #footer>
-                <el-button @click="renameVisible = false">取消</el-button>
-                <el-button type="primary" @click="submitRename">确定</el-button>
             </template>
         </el-dialog>
 
@@ -510,11 +419,9 @@
 import useAppStore from '@/store/modules/app'
 import {Splitpanes, Pane} from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
-import {getExperimentList,getdataList,getdataDetail,updatedata,deldata,adddata} from '@/api/data/bussiness'
+import {getExperimentList,getdataList,getdataDetail,updatedata,deldata,adddata,previewData} from '@/api/data/bussiness'
 import {getInfo} from "@/api/data/info"
-import {generatePath} from '@/utils/generatePath'
 import { addDateRange } from "@/utils/ruoyi"
-import request from '@/utils/request'
 import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
 import { UploadFilled, Folder as ElIconFolder, Document as ElIconDocument, ArrowUp } from '@element-plus/icons-vue'
 import ImageViewer from '@/views/viewer/ImageViewer.vue'
@@ -534,7 +441,6 @@ const open = ref(false)
 const openView = ref(false)
 const openExperiment = ref(false)
 const targetTypeOptions = ref([])
-const addExperimentitle = ref("添加试验")
 const title = ref("")
 
 const name = ref('')
@@ -547,9 +453,6 @@ const single = ref(true)
 const multiple = ref(true)
 
 // 文件管理器相关状态
-const INITIAL_PATH = 'E:\\data'
-const currentPath = ref(INITIAL_PATH)
-const fileList = ref([])
 const fileLoading = ref(false)
 const importVisible = ref(false)
 const renameVisible = ref(false)
@@ -559,7 +462,6 @@ const newFileName = ref('')
 const newFolderName = ref('')
 const fileManagerPreviewFile = ref(null)
 const fileManagerPreviewVisible = ref(false)
-const renameFile = ref(null)
 const uploadDataFormRef = ref(null)
 
 // 详情预览相关状态
@@ -579,7 +481,6 @@ function openFileManager() {
   }).catch(err => {
     ElMessage.error('获取试验目标失败: ' + (err.message || '未知错误'))
   })
-  loadFileList()
 }
 
 /** 导出数据 (下载) */
@@ -602,10 +503,6 @@ function handleExportData() {
     if (res.code === 200) pollProgress(res.data)
     else ElMessage.error(res.msg)
   }).catch(e => ElMessage.error('导出请求失败: ' + (e.message || '未知错误')))
-}
-
-function handleRename() {
-  console.log("重命名数据")
 }
 
 const uploadDataForm = reactive({
@@ -649,6 +546,9 @@ const data = reactive({
         ],
         dataType: [
             { required: true, message: "数据种类不能为空", trigger: "blur" }
+        ],
+        fileName: [
+            { required: true, message: "文件名称不能为空", trigger: "blur" }
         ]
     }
 })
@@ -701,12 +601,6 @@ function getTreeData() {
         console.error('Failed to load tree data:', error)
     })
 }
-/** 自动生成路径 */
-async function handleGeneratePath() {
-  if (experimentform.name) {
-    experimentform.path = await generatePath(experimentform.name)
-  }
-}
 function getProjects() {
   getInfo(null, 'experiment').then(res => {
     projectOptions.value = res.projects || []
@@ -730,10 +624,21 @@ const fileManagerPreviewComponent = computed(() => getPreviewComponent(fileManag
 
 const detailFileInfo = computed(() => {
   if (!detailFile.value) return null
+  // 如果是CSV文件且有预览数据，直接使用预览数据
+  if (detailFile.value.name.toLowerCase().endsWith('.csv') && detailFile.value.csvData) {
+    return {
+      name: detailFile.value.name,
+      path: detailFile.value.path,
+      csvData: detailFile.value.csvData,
+      isCsv: true
+    }
+  }
+  // 其他文件类型使用原有方式
   return {
     name: detailFile.value.name,
     path: detailFile.value.path,
-    contentUrl: `/api/file/content?path=${encodeURIComponent(detailFile.value.path)}`
+    contentUrl: `/api/file/content?path=${encodeURIComponent(detailFile.value.path)}`,
+    isCsv: false
   }
 })
 
@@ -749,7 +654,7 @@ function getPreviewComponent(file) {
     type = 'image'
   } else if (fileName.endsWith('.mp4') || fileName.endsWith('.webm') || fileName.endsWith('.avi')) {
     type = 'video'
-  } else if (fileName.endsWith('.txt') || fileName.endsWith('.csv') || fileName.endsWith('.json')) {
+  } else if (fileName.endsWith('.txt')) {
     type = 'text'
   } else if (fileName.endsWith('.json')) {
     type = 'json'
@@ -757,6 +662,8 @@ function getPreviewComponent(file) {
     type = 'pdf'
   } else if (fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) {
     type = 'excel'
+  } else if (fileName.endsWith('.csv')) {
+    type = 'csv'
   }
 
   const componentMap = {
@@ -766,91 +673,12 @@ function getPreviewComponent(file) {
     json: JsonViewer,
     pdf: PDFViewer,
     excel: ExcelViewer,
+    csv: ExcelViewer,
     binary: BinaryViewer
   }
   return componentMap[type]
 }
 
-const loadFileList = async () => {
-  fileLoading.value = true
-  try {
-    const res = await request({
-      url: '/api/file/list',
-      method: 'get',
-      params: { path: currentPath.value }
-    })
-    fileList.value = (res.data || []).sort((a, b) => {
-      if (a.isDir !== b.isDir) return b.isDir - a.isDir
-      return a.name.localeCompare(b.name)
-    })
-  } catch (err) {
-    ElMessage.error('加载文件列表失败: ' + err.message)
-  } finally {
-    fileLoading.value = false
-  }
-}
-
-const handleFileOpen = (row) => {
-  if (row.isDir) {
-    currentPath.value = row.path
-    loadFileList()
-  }
-}
-
-const handleFilePreview = (row) => {
-  if (!row.isDir) {
-    fileManagerPreviewFile.value = row
-    fileManagerPreviewVisible.value = true
-  }
-}
-
-const handleFileRename = (row) => {
-  renameFile.value = row
-  newFileName.value = row.name
-  renameVisible.value = true
-}
-
-const submitRename = async () => {
-  try {
-    await request({
-      url: '/api/file/rename',
-      method: 'post',
-      data: {
-        oldPath: renameFile.value.path,
-        newName: newFileName.value
-      }
-    })
-    ElMessage.success('重命名成功')
-    renameVisible.value = false
-    loadFileList()
-  } catch (err) {
-    ElMessage.error('重命名失败')
-  }
-}
-
-const handleFileDelete = (row) => {
-  ElMessageBox.confirm(
-    `确定删除 "${row.name}" 吗?`,
-    '警告',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    }
-  ).then(async () => {
-    try {
-      await request({
-        url: '/api/file/delete',
-        method: 'post',
-        data: { path: row.path }
-      })
-      ElMessage.success('删除成功')
-      loadFileList()
-    } catch (err) {
-      ElMessage.error('删除失败')
-    }
-  })
-}
 
 const selectableTreeOptions = computed(() => {
     const disableProjects = (nodes) => {
@@ -871,7 +699,6 @@ const resetUploadData = () => {
   uploadDataForm.dataType = ''
   uploadDataForm.isSimulation = true
   uploadFiles.value = []
-  currentPath.value = INITIAL_PATH
   if (uploadDataFormRef.value) {
     uploadDataFormRef.value.resetFields()
   }
@@ -903,35 +730,19 @@ const submitUpload = async () => {
 
     try {
         for (const file of uploadFiles.value) {
-            const formData = new FormData()
-            formData.append('file', file.raw)
-            formData.append('path', currentPath.value)
-            
-            await request({
-                url: '/api/file/upload',
-                method: 'post',
-                data: formData,
-                headers: { 'Content-Type': 'multipart/form-data' }
-            })
-
-            // 上传成功后，保存业务数据
-            const fullPath = currentPath.value + (currentPath.value.endsWith('\\') || currentPath.value.endsWith('/') ? '' : '/') + (file.raw.webkitRelativePath || file.name)
-            
+            // 构建业务数据对象
             const businessData = {
                 dataName: uploadDataForm.dataName || file.name,
                 experimentId: uploadDataForm.experimentId,
                 targetId: uploadDataForm.targetId,
-                targetType: uploadDataForm.targetType,
                 dataType: uploadDataForm.dataType,
-                isSimulation: uploadDataForm.isSimulation,
-                dataFilePath: fullPath,
-                // 生成随机解析结果
-                sampleFrequency: Math.floor(Math.random() * 1000) + 1,
-                workStatus: ['正常', '异常', '待机'][Math.floor(Math.random() * 3)]
+                isSimulation: uploadDataForm.isSimulation
             }
             
-            await adddata(businessData)
+            // 调用修改后的API，同时传递数据和文件
+            await adddata(businessData, file.raw)
         }
+        
         ElMessage.success('数据导入成功')
         importVisible.value = false
         await getList() // 自动查询业务数据列表
@@ -941,62 +752,6 @@ const submitUpload = async () => {
   })
 }
 
-const handleNewFolder = () => {
-  newFolderName.value = ''
-  newFolderVisible.value = true
-}
-
-const submitNewFolder = async () => {
-  if (!newFolderName.value.trim()) {
-    ElMessage.warning('文件夹名称不能为空')
-    return
-  }
-
-  try {
-    await request({
-      url: '/api/file/mkdir',
-      method: 'post',
-      data: {
-        path: currentPath.value,
-        dirName: newFolderName.value
-      }
-    })
-    ElMessage.success('创建成功')
-    newFolderVisible.value = false
-    loadFileList()
-  } catch (err) {
-    ElMessage.error('创建失败')
-  }
-}
-
-const handleRefresh = () => {
-  loadFileList()
-}
-
-const handleGoUp = () => {
-  if (currentPath.value === INITIAL_PATH) return
-  const sep = currentPath.value.includes('/') ? '/' : '\\'
-  const lastIndex = currentPath.value.lastIndexOf(sep)
-  if (lastIndex > -1) {
-    const parentPath = currentPath.value.substring(0, lastIndex)
-    if (parentPath.length >= INITIAL_PATH.length) {
-       currentPath.value = parentPath
-       loadFileList()
-    }
-  }
-}
-
-const formatSize = (bytes) => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
-}
-
-const formatDate = (timestamp) => {
-  return new Date(timestamp).toLocaleString('zh-CN')
-}
 const percent=ref(0)
 const timer=ref(null)
 /** 下载详情中的文件 */
@@ -1112,6 +867,7 @@ function reset() {
     dataName: null,
     isSimulation: null,
     dataType: null,
+    fileName: null,
     startTime: null,
     location: null,
     contentDesc: null
@@ -1161,29 +917,38 @@ function submitForm() {
     }
   })
 }
-/**提交新增试验表单 */
-function submitaddExperimentForm() {
-  proxy.$refs["infoRef"].validate(valid => {
-    if (valid) {
-      const submitData = { ...experimentform, type: 'experiment' }
-      addInfo(submitData).then(response => {
-        proxy.$modal.msgSuccess("添加成功")
-        openExperiment.value = false
-        getTreeData() // 刷新左侧树形结构
-      })
-    }
-  })
-}
 
 /** 详情按钮操作 (打开文件预览) */
 function handleView(row) {
   if (row.dataFilePath) {
-    detailFile.value = {
-      name: row.dataName,
-      path: row.dataFilePath
+    // 检查是否为CSV文件
+    const fileName = row.dataName.toLowerCase()
+    if (fileName.endsWith('.csv')) {
+      // 使用后端预览API处理CSV文件
+      previewData({ experimentId: row.experimentId, dataFilePath: row.dataFilePath }).then(response => {
+        if (response.code === 200) {
+          detailFile.value = {
+            name: row.dataName,
+            path: row.dataFilePath,
+            csvData: response.data // 存储CSV预览数据
+          }
+          detailTitle.value = `CSV文件预览: ${row.dataName}`
+          detailVisible.value = true
+        } else {
+          ElMessage.error(response.msg || "预览失败")
+        }
+      }).catch(error => {
+        ElMessage.error("预览请求失败: " + error.message)
+      })
+    } else {
+      // 其他文件类型使用原有预览方式
+      detailFile.value = {
+        name: row.dataName,
+        path: row.dataFilePath
+      }
+      detailTitle.value = `文件预览: ${row.dataName}`
+      detailVisible.value = true
     }
-    detailTitle.value = `文件预览: ${row.dataName}`
-    detailVisible.value = true
   } else {
     ElMessage.warning("该数据没有关联的文件路径")
   }

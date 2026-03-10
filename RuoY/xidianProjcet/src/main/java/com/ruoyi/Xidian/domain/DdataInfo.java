@@ -34,6 +34,7 @@ public class DdataInfo extends BaseEntity {
     private Integer pageNum;
     private Integer pageSize;
     private Boolean isSimulation;
+    private String FileName;
 
     public void setId(Integer id) {
         this.id = id;
@@ -172,5 +173,11 @@ public class DdataInfo extends BaseEntity {
     }
     public Boolean getIsSimulation() {
         return isSimulation;
+    }
+    public void setFileName(String fileName) {
+        this.FileName = fileName;
+    }
+    public String getFileName() {
+        return FileName;
     }
 }

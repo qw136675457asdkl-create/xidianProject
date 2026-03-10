@@ -5,11 +5,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.UUID;
 
 import com.ruoyi.common.annotation.DataSource;
+import com.ruoyi.common.annotation.Log;
+import com.ruoyi.common.config.RuoYiConfig;
+import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.enums.DataSourceType;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
+import com.ruoyi.common.utils.file.FileUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import com.ruoyi.Xidian.mapper.DProjectInfoMapper;
@@ -27,6 +32,8 @@ public class DProjectInfoServiceImpl implements IDProjectInfoService
 {
     @Autowired
     private DProjectInfoMapper dProjectInfoMapper;
+
+    private final String profile = RuoYiConfig.getProfile();
 
     /**
      * 查询项目信息
@@ -61,15 +68,25 @@ public class DProjectInfoServiceImpl implements IDProjectInfoService
     @Override
     public int insertDProjectInfo(DProjectInfo dProjectInfo)
     {
-        String projectPath = "/home/hyy1208/data/" + dProjectInfo.getProjectName();
+        String projectPath = profile + "/" + dProjectInfo.getProjectName();
+        String pathStr = dProjectInfo.getProjectName();
         Path path= Paths.get(projectPath);
+        //检查路径是否包含无效字符
+        if(!dProjectInfo.getProjectName().matches("^[a-zA-Z0-9_\\-\\u4e00-\\u9fa5]+$")) {
+            throw new ServiceException("项目名称只能包含字母、数字、下划线、短横线和中文字符");
+        }
+        //检查路径是否已存在
+        if(Files.exists(path)){
+            pathStr = dProjectInfo.getProjectName()+ UUID.randomUUID().toString().substring(0, 5);
+            path= Paths.get(profile + "/" + pathStr);
+        }
         try{
             Files.createDirectories(path);
         } catch (IOException e) {
             throw new ServiceException("创建项目目录失败：" + e.getMessage());
         }
         //存储相对路径
-        dProjectInfo.setPath("/"+dProjectInfo.getProjectName());
+        dProjectInfo.setPath("/"+pathStr);
         return dProjectInfoMapper.insertDProjectInfo(dProjectInfo);
     }
 
@@ -84,16 +101,21 @@ public class DProjectInfoServiceImpl implements IDProjectInfoService
     {
         dProjectInfo.setUpdateTime(DateUtils.getNowDate());
         //修改项目目录
-        String oldProjectPath= "/home/hyy1208/data" + dProjectInfoMapper.selectDProjectInfoByProjectId(dProjectInfo.getProjectId()).getPath();
-        String newProjectPath= "/home/hyy1208/data" + dProjectInfo.getPath();
+        String oldProjectPath= profile + dProjectInfoMapper.selectDProjectInfoByProjectId(dProjectInfo.getProjectId()).getPath();
+        String newProjectPath= profile + dProjectInfo.getPath();
         Path oldPath= Paths.get(oldProjectPath);
         Path newPath= Paths.get(newProjectPath);
+        //检查新路径是否已存在
+        if(Files.exists(newPath)){
+            throw new ServiceException("新路径已存在，请重新输入");
+        }
+        if(!dProjectInfo.getPath().startsWith("/") || !dProjectInfo.getPath().substring(1).matches("^[a-zA-Z0-9_\\-\\u4e00-\\u9fa5]+$")) {
+            throw new ServiceException("新路径只能包含字母、数字、下划线、短横线和中文字符");
+        }
         try{
-            //检查新路径是否已存在
-            if(Files.exists(newPath)){
-                throw new ServiceException("新路径已存在，请重新输入");
+            if(!newProjectPath.equals(oldProjectPath)) {
+                Files.move(oldPath, newPath);
             }
-            Files.move(oldPath,newPath);
         } catch (IOException e) {
             throw new ServiceException("修改项目目录失败：" + e.getMessage());
         }
@@ -115,7 +137,7 @@ public class DProjectInfoServiceImpl implements IDProjectInfoService
         //检查项目目录下是否有文件
         for (Long projectId : projectIds) {
             DProjectInfo dProjectInfo = dProjectInfoMapper.selectDProjectInfoByProjectId(projectId);
-            String ProjectPath= "/home/hyy1208/data" + dProjectInfo.getPath();
+            String ProjectPath= profile + dProjectInfo.getPath();
             Path path= Paths.get(ProjectPath);
             try{
                 if(Files.list(path).findAny().isPresent()){
@@ -128,7 +150,7 @@ public class DProjectInfoServiceImpl implements IDProjectInfoService
         //删除项目目录
         for (Long projectId : projectIds) {
             DProjectInfo dProjectInfo = dProjectInfoMapper.selectDProjectInfoByProjectId(projectId);
-            String ProjectPath= "/home/hyy1208/data/" + dProjectInfo.getProjectName();
+            String ProjectPath= profile + dProjectInfo.getPath();
             Path path= Paths.get(ProjectPath);
             try{
                 Files.deleteIfExists(path);

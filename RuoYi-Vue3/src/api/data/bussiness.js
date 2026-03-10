@@ -35,9 +35,32 @@ export function deldata(ids) {
 }
 
 // 导入数据
-export function adddata(data) {
+export function adddata(data, file) {
+  const formData = new FormData()
+  
+  // 添加文件
+  if (file) {
+    formData.append('file', file)
+  }
+  
+  // 直接将数据对象的属性添加到FormData，使后端能够接收到值
+  for (const key in data) {
+    if (data.hasOwnProperty(key)) {
+      formData.append(key, data[key])
+    }
+  }
+  
   return request({
     url: '/data/bussiness/insert',
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export function previewData(data) {
+  return request({
+    url: '/data/bussiness/preview',
     method: 'post',
     data: data
   })

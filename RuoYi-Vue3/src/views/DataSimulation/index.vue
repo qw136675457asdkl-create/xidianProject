@@ -422,44 +422,6 @@
                     </el-row>
                 </el-form>
 
-                <!-- 路径导航和操作栏 - 统一高度对齐 -->
-                <div class="import-path-bar">
-                    <el-input v-model="currentPath" placeholder="输入文件夹路径" clearable @keyup.enter="loadFileList" class="import-path-input">
-                        <template #append>
-                            <el-button type="primary" @click="loadFileList">打开</el-button>
-                        </template>
-                    </el-input>
-                    <div class="import-path-actions">
-                        <el-button icon="ArrowUp" @click="handleGoUp" :disabled="currentPath === INITIAL_PATH">返回上级</el-button>
-                        <el-button @click="handleNewFolder">新建文件夹</el-button>
-                        <el-button @click="handleRefresh">刷新</el-button>
-                    </div>
-                </div>
-
-                <!-- 文件列表 -->
-                <el-table :data="fileList" v-loading="fileLoading" stripe class="import-file-table" height="220">
-                    <el-table-column label="文件名" width="300" prop="name">
-                        <template #default="{ row }">
-                            <el-icon v-if="row.isDir" style="margin-right: 8px;"><el-icon-folder /></el-icon>
-                            <el-icon v-else style="margin-right: 8px;"><el-icon-document /></el-icon>
-                            <el-link type="primary" :underline="false" @click="handleFileOpen(row)">{{ row.name }}</el-link>
-                        </template>
-                    </el-table-column>
-                    <el-table-column label="大小" width="100" prop="size">
-                        <template #default="{ row }">{{ formatSize(row.size) }}</template>
-                    </el-table-column>
-                    <el-table-column label="修改时间" width="180" prop="modified">
-                        <template #default="{ row }">{{ formatDate(row.modified) }}</template>
-                    </el-table-column>
-                    <el-table-column label="操作" width="200">
-                        <template #default="{ row }">
-                            <el-button link type="primary" size="small" @click="handleFilePreview(row)">预览</el-button>
-                            <el-button link type="primary" size="small" @click="handleFileRename(row)">重命名</el-button>
-                            <el-button link type="danger" size="small" @click="handleFileDelete(row)">删除</el-button>
-                        </template>
-                    </el-table-column>
-                </el-table>
-
                 <!-- 文件上传 -->
                 <el-divider>选择文件上传至当前文件夹</el-divider>
                 <el-upload drag action="" :auto-upload="false" :on-change="handleFileSelect" v-model:file-list="uploadFiles" class="import-upload">
@@ -470,15 +432,6 @@
             <template #footer>
                 <el-button @click="cancelUpload">取消</el-button>
                 <el-button type="primary" @click="submitUpload" :loading="fileLoading">导入数据</el-button>
-            </template>
-        </el-dialog>
-
-        <!-- 文件管理器预览对话框 -->
-        <el-dialog v-model="fileManagerPreviewVisible" :title="`预览: ${fileManagerPreviewFile?.name || ''}`" width="70%" append-to-body>
-            <component :is="fileManagerPreviewComponent" :file="fileManagerPreviewFileInfo" v-if="fileManagerPreviewFile" />
-            <el-empty v-else description="暂无预览内容" />
-            <template #footer>
-                <el-button type="primary" @click="fileManagerPreviewVisible = false">关闭</el-button>
             </template>
         </el-dialog>
 
@@ -495,24 +448,6 @@
                 </div>
             </template>
         </el-dialog>
-
-        <!-- 重命名对话框 -->
-        <el-dialog v-model="renameVisible" title="重命名" width="40%" append-to-body>
-            <el-input v-model="newFileName" placeholder="输入新文件名" />
-            <template #footer>
-                <el-button @click="renameVisible = false">取消</el-button>
-                <el-button type="primary" @click="submitRename">确定</el-button>
-            </template>
-        </el-dialog>
-
-        <!-- 新建文件夹对话框 -->
-        <el-dialog v-model="newFolderVisible" title="新建文件夹" width="40%" append-to-body>
-            <el-input v-model="newFolderName" placeholder="输入文件夹名称" />
-            <template #footer>
-                <el-button @click="newFolderVisible = false">取消</el-button>
-                <el-button type="primary" @click="submitNewFolder">创建</el-button>
-            </template>
-        </el-dialog>
     </div>
 </template>
 <script setup name="Business">
@@ -521,7 +456,6 @@ import {Splitpanes, Pane} from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
 import {getExperimentList,getdataList,getdataDetail,updatedata,deldata,adddata} from '@/api/data/bussiness'
 import {getInfo} from "@/api/data/info"
-import {generatePath} from '@/utils/generatePath'
 import { addDateRange } from "@/utils/ruoyi"
 import request from '@/utils/request'
 import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
@@ -559,17 +493,10 @@ const multiple = ref(true)
 // 文件管理器相关状态
 const INITIAL_PATH = 'E:\\data'
 const currentPath = ref(INITIAL_PATH)
-const fileList = ref([])
 const fileLoading = ref(false)
 const importVisible = ref(false)
-const renameVisible = ref(false)
-const newFolderVisible = ref(false)
 const uploadFiles = ref([])
-const newFileName = ref('')
-const newFolderName = ref('')
 const fileManagerPreviewFile = ref(null)
-const fileManagerPreviewVisible = ref(false)
-const renameFile = ref(null)
 const uploadDataFormRef = ref(null)
 
 // 详情预览相关状态
@@ -714,12 +641,6 @@ function getTreeData() {
         console.error('Failed to load tree data:', error)
     })
 }
-/** 自动生成路径 */
-async function handleGeneratePath() {
-  if (experimentform.name) {
-    experimentform.path = await generatePath(experimentform.name)
-  }
-}
 
 function getProjects(){
     getInfo(null, 'experiment').then(res => {
@@ -730,17 +651,6 @@ function getProjects(){
 }
 
 // --- 文件管理器逻辑开始 ---
-
-const fileManagerPreviewFileInfo = computed(() => {
-  if (!fileManagerPreviewFile.value) return null
-  return {
-    name: fileManagerPreviewFile.value.name,
-    path: fileManagerPreviewFile.value.path,
-    contentUrl: `/api/file/content?path=${encodeURIComponent(fileManagerPreviewFile.value.path)}`
-  }
-})
-
-const fileManagerPreviewComponent = computed(() => getPreviewComponent(fileManagerPreviewFile.value))
 
 const detailFileInfo = computed(() => {
   if (!detailFile.value) return null
@@ -785,86 +695,6 @@ function getPreviewComponent(file) {
   return componentMap[type]
 }
 
-const loadFileList = async () => {
-  fileLoading.value = true
-  try {
-    const res = await request({
-      url: '/api/file/list',
-      method: 'get',
-      params: { path: currentPath.value }
-    })
-    fileList.value = (res.data || []).sort((a, b) => {
-      if (a.isDir !== b.isDir) return b.isDir - a.isDir
-      return a.name.localeCompare(b.name)
-    })
-  } catch (err) {
-    ElMessage.error('加载文件列表失败: ' + err.message)
-  } finally {
-    fileLoading.value = false
-  }
-}
-
-const handleFileOpen = (row) => {
-  if (row.isDir) {
-    currentPath.value = row.path
-    loadFileList()
-  }
-}
-
-const handleFilePreview = (row) => {
-  if (!row.isDir) {
-    fileManagerPreviewFile.value = row
-    fileManagerPreviewVisible.value = true
-  }
-}
-
-const handleFileRename = (row) => {
-  renameFile.value = row
-  newFileName.value = row.name
-  renameVisible.value = true
-}
-
-const submitRename = async () => {
-  try {
-    await request({
-      url: '/api/file/rename',
-      method: 'post',
-      data: {
-        oldPath: renameFile.value.path,
-        newName: newFileName.value
-      }
-    })
-    ElMessage.success('重命名成功')
-    renameVisible.value = false
-    loadFileList()
-  } catch (err) {
-    ElMessage.error('重命名失败')
-  }
-}
-
-const handleFileDelete = (row) => {
-  ElMessageBox.confirm(
-    `确定删除 "${row.name}" 吗?`,
-    '警告',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    }
-  ).then(async () => {
-    try {
-      await request({
-        url: '/api/file/delete',
-        method: 'post',
-        data: { path: row.path }
-      })
-      ElMessage.success('删除成功')
-      loadFileList()
-    } catch (err) {
-      ElMessage.error('删除失败')
-    }
-  })
-}
 
 const selectableTreeOptions = computed(() => {
     const disableProjects = (nodes) => {
@@ -953,63 +783,6 @@ const submitUpload = async () => {
         ElMessage.error('导入失败: ' + (err.message || '未知错误'))
     }
   })
-}
-
-const handleNewFolder = () => {
-  newFolderName.value = ''
-  newFolderVisible.value = true
-}
-
-const submitNewFolder = async () => {
-  if (!newFolderName.value.trim()) {
-    ElMessage.warning('文件夹名称不能为空')
-    return
-  }
-
-  try {
-    await request({
-      url: '/api/file/mkdir',
-      method: 'post',
-      data: {
-        path: currentPath.value,
-        dirName: newFolderName.value
-      }
-    })
-    ElMessage.success('创建成功')
-    newFolderVisible.value = false
-    loadFileList()
-  } catch (err) {
-    ElMessage.error('创建失败')
-  }
-}
-
-const handleRefresh = () => {
-  loadFileList()
-}
-
-const handleGoUp = () => {
-  if (currentPath.value === INITIAL_PATH) return
-  const sep = currentPath.value.includes('/') ? '/' : '\\'
-  const lastIndex = currentPath.value.lastIndexOf(sep)
-  if (lastIndex > -1) {
-    const parentPath = currentPath.value.substring(0, lastIndex)
-    if (parentPath.length >= INITIAL_PATH.length) {
-       currentPath.value = parentPath
-       loadFileList()
-    }
-  }
-}
-
-const formatSize = (bytes) => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
-}
-
-const formatDate = (timestamp) => {
-  return new Date(timestamp).toLocaleString('zh-CN')
 }
 const percent=ref(0)
 const timer=ref(null)

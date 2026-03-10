@@ -24,6 +24,9 @@ public class RuoYiConfig
     /** 上传路径 */
     private static String profile;
 
+    /** 备份目录 */
+    private static String backupDir;
+
     /** 获取地址开关 */
     private static boolean addressEnabled;
 
@@ -68,6 +71,16 @@ public class RuoYiConfig
     public void setProfile(String profile)
     {
         RuoYiConfig.profile = profile;
+    }
+
+    public static String getBackupDir()
+    {
+        return backupDir;
+    }
+
+    public void setBackupDir(String backupDir)
+    {
+        RuoYiConfig.backupDir = backupDir;
     }
 
     public static boolean isAddressEnabled()

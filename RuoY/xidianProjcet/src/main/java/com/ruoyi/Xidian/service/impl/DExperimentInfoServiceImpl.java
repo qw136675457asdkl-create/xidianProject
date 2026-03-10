@@ -12,10 +12,12 @@ import com.ruoyi.Xidian.domain.TreeTableVo;
 import com.ruoyi.Xidian.mapper.DProjectInfoMapper;
 import com.ruoyi.Xidian.mapper.DTargetInfoMapper;
 import com.ruoyi.common.annotation.DataSource;
+import com.ruoyi.common.config.RuoYiConfig;
 import com.ruoyi.common.enums.DataSourceType;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.StringUtils;
+import com.ruoyi.common.utils.file.FileUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.web.servlet.error.AbstractErrorController;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,8 @@ public class DExperimentInfoServiceImpl implements IDExperimentInfoService {
     private DExperimentInfoMapper dExperimentInfoMapper;
     @Autowired
     private DProjectInfoMapper dProjectInfoMapper;
+
+    private final String profile = RuoYiConfig.getProfile();
 
     /**
      * 查询试验信息主树列表,并完全由后端造树
@@ -163,16 +167,24 @@ public class DExperimentInfoServiceImpl implements IDExperimentInfoService {
      */
     @Override
     public int insertDExperimentInfo(DExperimentInfo dExperimentInfo) {
-        String ProjectName=dProjectInfoMapper.selectDProjectInfoByProjectId(dExperimentInfo.getProjectId()).getProjectName();
-        String ExperimentPath= "/home/hyy1208/data/" + ProjectName + "/" + dExperimentInfo.getExperimentName();
+        String ProjectPath=dProjectInfoMapper.selectDProjectInfoByProjectId(dExperimentInfo.getProjectId()).getPath();
+        String ExperimentPath= profile + ProjectPath + "/" + dExperimentInfo.getExperimentName();
+        String pathStr =dExperimentInfo.getExperimentName();
         Path path= Paths.get(ExperimentPath);
+        if(!dExperimentInfo.getExperimentName().matches("^[a-zA-Z0-9_\\-\\u4e00-\\u9fa5]+$")) {
+            throw new ServiceException("试验名称只能包含字母、数字、下划线、短横线和中文字符");
+        }
+        if(Files.exists(path)){
+            pathStr = dExperimentInfo.getExperimentName()+ UUID.randomUUID().toString().substring(0, 5);
+            path= Paths.get(profile + ProjectPath + "/" + pathStr);
+        }
         try{
             Files.createDirectories(path);
         } catch (IOException e) {
             throw new ServiceException("创建试验目录失败：" + e.getMessage());
         }
         //存储相对路径
-        dExperimentInfo.setPath("/"+dExperimentInfo.getExperimentName());
+        dExperimentInfo.setPath("/"+pathStr);
         return dExperimentInfoMapper.insertDExperimentInfo(dExperimentInfo);
     }
 
@@ -189,18 +201,21 @@ public class DExperimentInfoServiceImpl implements IDExperimentInfoService {
         if(!dExperimentInfo.getPath().startsWith("/")) {
             throw new ServiceException("路径格式错误，必须以'/'开头");
         }
+        if(!dExperimentInfo.getPath().substring(1).matches("^[a-zA-Z0-9_\\-\\u4e00-\\u9fa5]+$")) {
+            throw new ServiceException("路径格式错误，只能包含字母、数字、下划线、短横线和中文字符");
+        }
         String ExperimentId=dExperimentInfo.getExperimentId();
         String oldPath=dExperimentInfoMapper.selectDExperimentInfoByExperimentId(ExperimentId).getPath();
         //修改文件路径
         String ParentPath=dProjectInfoMapper.selectDProjectInfoByProjectId(dExperimentInfo.getProjectId()).getPath();
-        String ExperimentPath= "/home/hyy1208/data" + ParentPath + dExperimentInfo.getPath();
+        String ExperimentPath= profile + ParentPath + dExperimentInfo.getPath();
         Path newPath= Paths.get(ExperimentPath);
         try{
             //检查新路径是否已存在
-            if(Files.exists(newPath)&&!newPath.equals(Paths.get("/home/hyy1208/data" + ParentPath + oldPath))){
+            if(Files.exists(newPath)&&!newPath.equals(Paths.get(profile + ParentPath + oldPath))){
                 throw new ServiceException("新路径已存在，请重新输入");
             }
-            Files.move(Paths.get("/home/hyy1208/data" + ParentPath + oldPath),newPath);
+            Files.move(Paths.get(profile + ParentPath + oldPath),newPath);
         } catch (IOException e) {
             throw new ServiceException("修改试验目录失败：" + e.getMessage());
         }
@@ -233,7 +248,7 @@ public class DExperimentInfoServiceImpl implements IDExperimentInfoService {
                 throw new ServiceException("试验所属项目不存在，试验ID：" + expInfo.getExperimentId());
             }
             String parentPath = dProjectInfoMapper.selectDProjectInfoByProjectId(projectId).getPath();
-            String dirPathStr = "/home/hyy1208/data" + parentPath + "/" + expInfo.getPath();
+            String dirPathStr = profile + parentPath + expInfo.getPath();
             Path dirPath = Paths.get(dirPathStr);
             dirPaths.add(dirPath);
 
