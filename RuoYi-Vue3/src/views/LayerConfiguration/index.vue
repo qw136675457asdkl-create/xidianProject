@@ -1,7 +1,7 @@
 <template>
   <div class="app-container">
     <el-row :gutter="15">
-      <el-form ref="formRef" :model="formData" :rules="rules" size="default" label-width="100px">
+      <el-form ref="formRef" :model="formData" :rules="rules" size="default" label-width="100px" v-hasPermi="['system:layerConfiguration:query']">
         <el-col :span="8">
           <el-form-item label-width="120px" label="图层默认透明度" prop="field103">
             <el-input v-model="formData.field103" type="text" placeholder="请输入图层默认透明度" clearable
@@ -98,8 +98,8 @@
         </el-col>
         <el-col :span="24" >
           <el-form-item>
-            <el-button type="primary" @click="submitForm">保存全局配置</el-button>
-            <el-button @click="resetForm">恢复默认配置</el-button>
+            <el-button type="primary" @click="submitForm" v-hasPermi="['system:layerConfiguration:save']">保存全局配置</el-button>
+            <el-button @click="resetForm" v-hasPermi="['system:layerConfiguration:reset']">恢复默认配置</el-button>
           </el-form-item>
         </el-col>
       </el-form>

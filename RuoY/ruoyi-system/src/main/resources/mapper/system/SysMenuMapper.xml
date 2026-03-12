@@ -146,7 +146,7 @@
 			<if test="orderNum != null">order_num = #{orderNum},</if>
 			<if test="path != null and path != ''">path = #{path},</if>
 			<if test="component != null">component = #{component},</if>
-			<if test="query != null">`query` = #{query},</if>
+			<if test="query != null">query = #{query},</if>
 			<if test="routeName != null">route_name = #{routeName},</if>
 			<if test="isFrame != null and isFrame != ''">is_frame = #{isFrame},</if>
 			<if test="isCache != null and isCache != ''">is_cache = #{isCache},</if>

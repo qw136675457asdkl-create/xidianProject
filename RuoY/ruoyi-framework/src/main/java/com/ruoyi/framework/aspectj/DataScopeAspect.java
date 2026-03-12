@@ -26,34 +26,22 @@ import com.ruoyi.framework.security.context.PermissionContextHolder;
 @Component
 public class DataScopeAspect
 {
-    /**
-     * 全部数据权限
-     */
+    /** 全部数据权限 */
     public static final String DATA_SCOPE_ALL = "1";
 
-    /**
-     * 自定数据权限
-     */
+    /** 自定数据权限 */
     public static final String DATA_SCOPE_CUSTOM = "2";
 
-    /**
-     * 部门数据权限
-     */
+    /** 部门数据权限 */
     public static final String DATA_SCOPE_DEPT = "3";
 
-    /**
-     * 部门及以下数据权限
-     */
+    /** 部门及以下数据权限 */
     public static final String DATA_SCOPE_DEPT_AND_CHILD = "4";
 
-    /**
-     * 仅本人数据权限
-     */
+    /** 仅本人数据权限 */
     public static final String DATA_SCOPE_SELF = "5";
 
-    /**
-     * 数据权限过滤关键字
-     */
+    /** 数据权限过滤关键字 */
     public static final String DATA_SCOPE = "dataScope";
 
     @Before("@annotation(controllerDataScope)")
@@ -65,12 +53,10 @@ public class DataScopeAspect
 
     protected void handleDataScope(final JoinPoint joinPoint, DataScope controllerDataScope)
     {
-        // 获取当前的用户
         LoginUser loginUser = SecurityUtils.getLoginUser();
         if (StringUtils.isNotNull(loginUser))
         {
             SysUser currentUser = loginUser.getUser();
-            // 如果是超级管理员，则不过滤数据
             if (StringUtils.isNotNull(currentUser) && !currentUser.isAdmin())
             {
                 String permission = StringUtils.defaultIfEmpty(controllerDataScope.permission(), PermissionContextHolder.getContext());
@@ -92,13 +78,6 @@ public class DataScopeAspect
     {
         StringBuilder sqlString = new StringBuilder();
         List<String> conditions = new ArrayList<String>();
-        List<String> scopeCustomIds = new ArrayList<String>();
-        user.getRoles().forEach(role -> {
-            if (DATA_SCOPE_CUSTOM.equals(role.getDataScope()) && StringUtils.equals(role.getStatus(), UserConstants.ROLE_NORMAL) && (StringUtils.isEmpty(permission) || StringUtils.containsAny(role.getPermissions(), Convert.toStrArray(permission))))
-            {
-                scopeCustomIds.add(Convert.toStr(role.getRoleId()));
-            }
-        });
 
         for (SysRole role : user.getRoles())
         {
@@ -117,25 +96,11 @@ public class DataScopeAspect
                 conditions.add(dataScope);
                 break;
             }
-            else if (DATA_SCOPE_CUSTOM.equals(dataScope))
+            else if (DATA_SCOPE_CUSTOM.equals(dataScope)
+                    || DATA_SCOPE_DEPT.equals(dataScope)
+                    || DATA_SCOPE_DEPT_AND_CHILD.equals(dataScope))
             {
-                if (scopeCustomIds.size() > 1)
-                {
-                    // 多个自定数据权限使用in查询，避免多次拼接。
-                    sqlString.append(StringUtils.format(" OR {}.dept_id IN ( SELECT dept_id FROM sys_role_dept WHERE role_id in ({}) ) ", deptAlias, String.join(",", scopeCustomIds)));
-                }
-                else
-                {
-                    sqlString.append(StringUtils.format(" OR {}.dept_id IN ( SELECT dept_id FROM sys_role_dept WHERE role_id = {} ) ", deptAlias, role.getRoleId()));
-                }
-            }
-            else if (DATA_SCOPE_DEPT.equals(dataScope))
-            {
-                sqlString.append(StringUtils.format(" OR {}.dept_id = {} ", deptAlias, user.getDeptId()));
-            }
-            else if (DATA_SCOPE_DEPT_AND_CHILD.equals(dataScope))
-            {
-                sqlString.append(StringUtils.format(" OR {}.dept_id IN ( SELECT dept_id FROM sys_dept WHERE dept_id = {} or find_in_set( {} , ancestors ) )", deptAlias, user.getDeptId(), user.getDeptId()));
+                appendDeptScopeSql(sqlString, deptAlias, userAlias, user.getDeptId());
             }
             else if (DATA_SCOPE_SELF.equals(dataScope))
             {
@@ -145,17 +110,15 @@ public class DataScopeAspect
                 }
                 else
                 {
-                    // 数据权限为仅本人且没有userAlias别名不查询任何数据
-                    sqlString.append(StringUtils.format(" OR {}.dept_id = 0 ", deptAlias));
+                    appendNoDataScopeSql(sqlString, deptAlias, userAlias);
                 }
             }
             conditions.add(dataScope);
         }
 
-        // 角色都不包含传递过来的权限字符，这个时候sqlString也会为空，所以要限制一下,不查询任何数据
         if (StringUtils.isEmpty(conditions))
         {
-            sqlString.append(StringUtils.format(" OR {}.dept_id = 0 ", deptAlias));
+            appendNoDataScopeSql(sqlString, deptAlias, userAlias);
         }
 
         if (StringUtils.isNotBlank(sqlString.toString()))
@@ -166,6 +129,30 @@ public class DataScopeAspect
                 BaseEntity baseEntity = (BaseEntity) params;
                 baseEntity.getParams().put(DATA_SCOPE, " AND (" + sqlString.substring(4) + ")");
             }
+        }
+    }
+
+    private static void appendDeptScopeSql(StringBuilder sqlString, String deptAlias, String userAlias, Long deptId)
+    {
+        if (StringUtils.isNotBlank(deptAlias) && StringUtils.isNotNull(deptId))
+        {
+            sqlString.append(StringUtils.format(" OR {}.dept_id = {} ", deptAlias, deptId));
+        }
+        else
+        {
+            appendNoDataScopeSql(sqlString, deptAlias, userAlias);
+        }
+    }
+
+    private static void appendNoDataScopeSql(StringBuilder sqlString, String deptAlias, String userAlias)
+    {
+        if (StringUtils.isNotBlank(deptAlias))
+        {
+            sqlString.append(StringUtils.format(" OR {}.dept_id = 0 ", deptAlias));
+        }
+        else if (StringUtils.isNotBlank(userAlias))
+        {
+            sqlString.append(StringUtils.format(" OR {}.user_id = 0 ", userAlias));
         }
     }
 
