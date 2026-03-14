@@ -76,4 +76,18 @@ public class SysOperLogServiceImpl implements ISysOperLogService
     {
         operLogMapper.cleanOperLog();
     }
+
+    /**
+     * 根据操作日志ID查询操作日志
+     *
+     * @param operIds 需要查询的操作日志ID
+     * @return 操作日志集合
+     */
+    @Override
+    public List<SysOperLog> selectOperLogByIds(Long[] operIds)
+    {
+        return operLogMapper.selectOperLogByIds(operIds);
+    }
+
+
 }

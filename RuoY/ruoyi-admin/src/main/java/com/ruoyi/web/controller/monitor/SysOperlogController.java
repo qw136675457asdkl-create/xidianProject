@@ -4,12 +4,7 @@ import java.util.List;
 import javax.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
@@ -44,9 +39,12 @@ public class SysOperlogController extends BaseController
     @Log(title = "操作日志", businessType = BusinessType.EXPORT)
     @PreAuthorize("@ss.hasPermi('monitor:operlog:export')")
     @PostMapping("/export")
-    public void export(HttpServletResponse response, SysOperLog operLog)
+    public void export(HttpServletResponse response, Long[] operIds)
     {
-        List<SysOperLog> list = operLogService.selectOperLogList(operLog);
+        if (operIds == null || operIds.length == 0) {
+            throw new RuntimeException("导出的ID不能为空");
+        }
+        List<SysOperLog> list = operLogService.selectOperLogByIds(operIds);
         ExcelUtil<SysOperLog> util = new ExcelUtil<SysOperLog>(SysOperLog.class);
         util.exportExcel(response, list, "操作日志");
     }
@@ -54,18 +52,24 @@ public class SysOperlogController extends BaseController
     @Log(title = "操作日志", businessType = BusinessType.EXPORT)
     @PreAuthorize("@ss.hasPermi('monitor:operlog:export')")
     @PostMapping("/export/word")
-    public void exportWord(HttpServletResponse response, SysOperLog operLog) throws Exception
+    public void exportWord(HttpServletResponse response, Long[] operIds) throws Exception
     {
-        List<SysOperLog> list = operLogService.selectOperLogList(operLog);
+        if (operIds == null || operIds.length == 0) {
+            throw new RuntimeException("导出的ID不能为空");
+        }
+        List<SysOperLog> list = operLogService.selectOperLogByIds(operIds);
         LogDocumentExportUtil.exportOperLogWord(response, list);
     }
 
     @Log(title = "操作日志", businessType = BusinessType.EXPORT)
     @PreAuthorize("@ss.hasPermi('monitor:operlog:export')")
     @PostMapping("/export/pdf")
-    public void exportPdf(HttpServletResponse response, SysOperLog operLog) throws Exception
+    public void exportPdf(HttpServletResponse response, Long[] operIds) throws Exception
     {
-        List<SysOperLog> list = operLogService.selectOperLogList(operLog);
+        if (operIds == null || operIds.length == 0) {
+            throw new RuntimeException("导出的ID不能为空");
+        }
+        List<SysOperLog> list = operLogService.selectOperLogByIds(operIds);
         LogDocumentExportUtil.exportOperLogPdf(response, list);
     }
 

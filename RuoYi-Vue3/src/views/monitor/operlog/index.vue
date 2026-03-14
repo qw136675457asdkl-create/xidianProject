@@ -567,23 +567,51 @@ function handleClean() {
 
 /** 导出按钮操作 */
 function handleExport() {
+  const idsArray = Array.isArray(ids.operId || ids.value) ? (ids.operId || ids.value) : [ids.operId || ids.value];
+  
+  // 核心修改：将数组拼成以逗号分隔的字符串
+  const operIdsStr = idsArray.join(','); 
+  
+  if (!operIdsStr) {
+    proxy.$modal.msgWarning("请选择要导出的数据");
+    return;
+  }
+
   proxy.download("monitor/operlog/export", {
-    ...queryParams.value,
+    operIds: operIdsStr // 这里传拼好的字符串
   }, `config_${new Date().getTime()}.xlsx`)
 }
 
 /** 导出Word按钮操作 */
 function handleExportWord() {
+  const idsArray = Array.isArray(ids.operId || ids.value) ? (ids.operId || ids.value) : [ids.operId || ids.value];
+  
+  const operIdsStr = idsArray.join(','); 
+  
+  if (!operIdsStr) {
+    proxy.$modal.msgWarning("请选择要导出的数据");
+    return;
+  }
+  
   proxy.download("monitor/operlog/export/word", {
-    ...queryParams.value,
-  }, `operlog_${new Date().getTime()}.docx`)
+    operIds: operIdsStr
+  }, `operlog_${new Date().getTime()}.docx`);
 }
 
 /** 导出PDF按钮操作 */
 function handleExportPdf() {
+  const idsArray = Array.isArray(ids.operId || ids.value) ? (ids.operId || ids.value) : [ids.operId || ids.value];
+  
+  const operIdsStr = idsArray.join(','); 
+  
+  if (!operIdsStr) {
+    proxy.$modal.msgWarning("请选择要导出的数据");
+    return;
+  }
+  
   proxy.download("monitor/operlog/export/pdf", {
-    ...queryParams.value,
-  }, `operlog_${new Date().getTime()}.pdf`)
+    operIds: operIdsStr
+  }, `operlog_${new Date().getTime()}.pdf`);
 }
 
 getList()

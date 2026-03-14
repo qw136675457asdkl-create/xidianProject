@@ -244,19 +244,20 @@ onMounted(() => {
 
 .filter-card {
   margin-bottom: 24px;
-  padding: 16px 20px 4px;
+  padding: 18px 24px 8px;
 }
 
 .filter-form {
-  width: 80%;
+  width: 100%;
 }
 
 .filter-row {
   align-items: flex-start;
+  row-gap: 2px;
 }
 
 .filter-item {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .filter-col {
@@ -271,13 +272,15 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
-  min-height: 32px;
-  margin-left: 12px;
+  gap: 10px;
+  min-height: 40px;
+  margin-left: 0;
+  flex-wrap: wrap;
 }
 
 .filter-item-actions {
-  padding-top: 27px;
+  padding-top: 31px;
+  margin-left: auto;
 }
 
 .table-card {
@@ -301,7 +304,7 @@ onMounted(() => {
 }
 
 :deep(.filter-form .el-form-item__label) {
-  padding-bottom: 6px;
+  padding-bottom: 8px;
   color: #1f1f1f;
   font-weight: 500;
   font-size: 13px;
@@ -311,19 +314,19 @@ onMounted(() => {
 :deep(.filter-control.el-input),
 :deep(.filter-control.el-select) {
   width: 100%;
-  max-width: 220px;
+  max-width: none;
 }
 
 :deep(.filter-control.el-date-editor) {
   width: 100%;
-  max-width: 320px;
+  max-width: none;
 }
 
 :deep(.filter-control .el-input__wrapper),
 :deep(.filter-control .el-select__wrapper),
 :deep(.filter-control.el-range-editor.el-input__wrapper) {
-  min-height: 32px;
-  border-radius: 6px;
+  min-height: 40px;
+  border-radius: 8px;
   box-shadow: 0 0 0 1px #d9d9d9 inset;
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
@@ -347,9 +350,10 @@ onMounted(() => {
 }
 
 :deep(.filter-action-group .el-button) {
-  min-height: 32px;
-  padding: 0 16px;
-  border-radius: 6px;
+  min-height: 40px;
+  min-width: 92px;
+  padding: 0 18px;
+  border-radius: 8px;
 }
 
 :deep(.filter-action-group .el-button--primary) {
@@ -429,13 +433,13 @@ onMounted(() => {
 }
 
 @media (max-width: 1440px) {
-  :deep(.filter-control.el-input),
-  :deep(.filter-control.el-select) {
-    max-width: 100%;
+  .filter-card {
+    padding-left: 20px;
+    padding-right: 20px;
   }
 
-  :deep(.filter-control.el-date-editor) {
-    max-width: 100%;
+  .filter-item-actions {
+    margin-left: 0;
   }
 }
 
@@ -446,14 +450,29 @@ onMounted(() => {
     padding-right: 16px;
   }
 
+  .filter-row {
+    row-gap: 0;
+  }
+
+  .filter-col,
+  .filter-col-range,
+  .filter-col-actions {
+    width: 100%;
+  }
+
   .filter-action-group {
     justify-content: flex-start;
-    margin-left: 0;
-    flex-wrap: wrap;
+    width: 100%;
   }
 
   .filter-item-actions {
     padding-top: 0;
+    margin-left: 0;
+  }
+
+  :deep(.filter-action-group .el-button) {
+    flex: 1 1 calc(50% - 5px);
+    min-width: 0;
   }
 }
 </style>

@@ -66,6 +66,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 		</where>
 		order by oper_id desc
 	</select>
+
 	
 	<delete id="deleteOperLogByIds" parameterType="Long">
  		delete from sys_oper_log where oper_id in
@@ -78,7 +79,32 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 		<include refid="selectOperLogVo"/>
 		where oper_id = #{operId}
 	</select>
-	
+
+	<select id="selectOperLogByIds" parameterType="Long" resultMap="SysOperLogResult">
+		<include refid="selectOperLogVo"/>
+		where oper_id in
+		<foreach collection="array" item="operId" open="(" separator="," close=")">
+			#{operId}
+        </foreach>
+	</select>
+	<select id="getAuditLogTableSize" resultType="java.lang.Double">
+		SELECT
+			ROUND(SUM(BYTES) / 1024 / 1024, 2) AS size_mb
+		FROM
+			USER_SEGMENTS
+		WHERE
+			SEGMENT_TYPE = 'TABLE'
+		  AND SEGMENT_NAME IN ('SYS_OPER_LOG', 'SYS_LOGININFOR')
+	</select>
+	<select id="selectOldOperLogs" resultMap="SysOperLogResult">
+		<include refid="selectOperLogVo"/>
+		where oper_time &lt; #{cutoffDate}
+	</select>
+
+	<delete id="deleteOldOperLogs">
+		delete from sys_oper_log where oper_time &lt; #{cutoffDate}
+	</delete>
+
 	<update id="cleanOperLog">
         truncate table sys_oper_log
     </update>

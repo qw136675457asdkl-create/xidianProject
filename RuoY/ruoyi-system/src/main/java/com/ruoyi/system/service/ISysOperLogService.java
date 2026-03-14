@@ -45,4 +45,6 @@ public interface ISysOperLogService
      * 清空操作日志
      */
     public void cleanOperLog();
+
+    List<SysOperLog> selectOperLogByIds(Long[] operIds);
 }
