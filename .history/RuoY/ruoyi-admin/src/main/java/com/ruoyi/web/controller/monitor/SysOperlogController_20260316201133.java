@@ -30,7 +30,7 @@ import com.ruoyi.web.controller.monitor.support.LogDocumentExportUtil;
 @RequestMapping("/monitor/operlog")
 public class SysOperlogController extends BaseController
 {
-    private static final String OPER_LOG_MAX_STORAGE_CONFIG_KEY = "audit.log.max.size";
+    private static final String OPER_LOG_MAX_STORAGE_CONFIG_KEY = "sys.operlog.maxStorageMb";
 
     @Autowired
     private ISysOperLogService operLogService;
