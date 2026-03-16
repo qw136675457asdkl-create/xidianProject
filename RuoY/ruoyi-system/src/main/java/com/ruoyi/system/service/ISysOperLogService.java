@@ -47,4 +47,11 @@ public interface ISysOperLogService
     public void cleanOperLog();
 
     List<SysOperLog> selectOperLogByIds(Long[] operIds);
+
+    /**
+     * 查询日志表占用空间（MB），包含操作日志与登录日志
+     *
+     * @return 占用空间（MB）
+     */
+    double getAuditLogTableSize();
 }

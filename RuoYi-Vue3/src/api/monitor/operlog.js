@@ -24,3 +24,11 @@ export function cleanOperlog() {
     method: 'delete'
   })
 }
+
+// 查询日志存储空间使用情况
+export function getOperlogStorage() {
+  return request({
+    url: '/monitor/operlog/storage',
+    method: 'get'
+  })
+}

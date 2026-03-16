@@ -75,6 +75,24 @@
       </el-form-item>
     </el-form>
 
+    <el-card class="log-storage-card" shadow="never">
+      <div class="log-storage-title">日志存储空间</div>
+      <el-row :gutter="16" class="log-storage-values">
+        <el-col :xs="24" :sm="8">最大容量：{{ storageInfo.maxMb }} MB</el-col>
+        <el-col :xs="24" :sm="8">已用容量：{{ storageInfo.usedMb }} MB</el-col>
+        <el-col :xs="24" :sm="8">剩余容量：{{ storageInfo.remainingMb }} MB</el-col>
+      </el-row>
+      <el-progress
+          :percentage="storageInfo.usagePercent"
+          :status="storageStatus"
+          :stroke-width="18"
+          :format="(val) => `使用率 ${val}%`"
+      />
+      <div v-if="storageInfo.overflow" class="log-storage-alert">
+        当前已超过最大容量，请及时清理日志或调大参数 {{ storageInfo.maxConfigKey }}。
+      </div>
+    </el-card>
+
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
         <el-button
@@ -216,7 +234,7 @@
 </template>
 
 <script setup name="Operlog">
-import {list, delOperlog, cleanOperlog} from "@/api/monitor/operlog"
+import {list, delOperlog, cleanOperlog, getOperlogStorage} from "@/api/monitor/operlog"
 
 const {proxy} = getCurrentInstance()
 const {sys_oper_type, sys_common_status} = proxy.useDict("sys_oper_type", "sys_common_status")
@@ -234,6 +252,23 @@ const dateRange = ref([])
 const defaultSort = ref({prop: "operTime", order: "descending"})
 const detailDescription = ref("")
 const detailFacts = ref("")
+const storageInfo = ref({
+  usedMb: 0,
+  maxMb: 0,
+  remainingMb: 0,
+  usagePercent: 0,
+  overflow: false,
+  maxConfigKey: "sys.operlog.maxStorageMb"
+})
+const storageStatus = computed(() => {
+  if (storageInfo.value.overflow) {
+    return "exception"
+  }
+  if (storageInfo.value.usagePercent >= 80) {
+    return "warning"
+  }
+  return "success"
+})
 
 const data = reactive({
   form: {},
@@ -257,6 +292,20 @@ function getList() {
     operlogList.value = response.rows
     total.value = response.total
     loading.value = false
+    loadStorage()
+  })
+}
+
+function loadStorage() {
+  getOperlogStorage().then(response => {
+    storageInfo.value = {
+      usedMb: Number(response.usedMb ?? 0),
+      maxMb: Number(response.maxMb ?? 0),
+      remainingMb: Number(response.remainingMb ?? 0),
+      usagePercent: Number(response.usagePercent ?? 0),
+      overflow: !!response.overflow,
+      maxConfigKey: response.maxConfigKey || "sys.operlog.maxStorageMb"
+    }
   })
 }
 
@@ -616,3 +665,25 @@ function handleExportPdf() {
 
 getList()
 </script>
+
+<style scoped>
+.log-storage-card {
+  margin-bottom: 12px;
+}
+
+.log-storage-title {
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.log-storage-values {
+  margin-bottom: 10px;
+  color: #606266;
+}
+
+.log-storage-alert {
+  margin-top: 8px;
+  color: #f56c6c;
+  font-size: 13px;
+}
+</style>

@@ -89,5 +89,11 @@ public class SysOperLogServiceImpl implements ISysOperLogService
         return operLogMapper.selectOperLogByIds(operIds);
     }
 
+    @Override
+    public double getAuditLogTableSize()
+    {
+        Double sizeMb = operLogMapper.getAuditLogTableSize();
+        return sizeMb == null ? 0D : sizeMb;
+    }
 
 }
