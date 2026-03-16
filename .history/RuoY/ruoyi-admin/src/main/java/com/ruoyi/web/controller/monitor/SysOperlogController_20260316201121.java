@@ -145,4 +145,3 @@ public class SysOperlogController extends BaseController
     {
         return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
-}

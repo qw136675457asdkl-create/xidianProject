@@ -144,5 +144,4 @@ public class SysOperlogController extends BaseController
     private double round2(double value)
     {
         return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
-    }
-}
+    }}
