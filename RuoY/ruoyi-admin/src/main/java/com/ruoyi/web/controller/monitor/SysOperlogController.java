@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import javax.servlet.http.HttpServletResponse;
+
+import com.ruoyi.common.config.RuoYiConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -29,7 +31,6 @@ import com.ruoyi.web.controller.monitor.support.LogDocumentExportUtil;
 public class SysOperlogController extends BaseController
 {
     private static final String OPER_LOG_MAX_STORAGE_CONFIG_KEY = "sys.operlog.maxStorageMb";
-    private static final double DEFAULT_MAX_STORAGE_MB = 1024D;
 
     @Autowired
     private ISysOperLogService operLogService;
@@ -127,16 +128,16 @@ public class SysOperlogController extends BaseController
         String value = configService.selectConfigByKey(OPER_LOG_MAX_STORAGE_CONFIG_KEY);
         if (StringUtils.isEmpty(value))
         {
-            return DEFAULT_MAX_STORAGE_MB;
+            return RuoYiConfig.getThresholdMb();
         }
         try
         {
             double mb = Double.parseDouble(value.trim());
-            return mb > 0D ? mb : DEFAULT_MAX_STORAGE_MB;
+            return mb > 0D ? mb : RuoYiConfig.getThresholdMb();
         }
         catch (Exception e)
         {
-            return DEFAULT_MAX_STORAGE_MB;
+            return RuoYiConfig.getThresholdMb();
         }
     }
 
