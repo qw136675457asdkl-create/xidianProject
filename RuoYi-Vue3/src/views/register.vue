@@ -1,6 +1,7 @@
 <template>
   <div class="register">
-    <el-form ref="registerRef" :model="registerForm" :rules="registerRules" class="register-form" autocomplete="off">
+    <div class="register-card">
+      <el-form ref="registerRef" :model="registerForm" :rules="registerRules" class="register-form" autocomplete="off">
       <div class="form">
         <p id="heading">{{ title }}</p>
         <input class="register-autofill-guard" type="text" name="fake_username" autocomplete="username" tabindex="-1" />
@@ -78,7 +79,8 @@
           </div>
         </el-form-item>
       </div>
-    </el-form>
+      </el-form>
+    </div>
 
     <div class="el-register-footer">
       <span>{{ footerContent }}</span>
@@ -172,31 +174,72 @@ getCode()
 .register {
   width: 100%;
   min-height: 100vh;
-  background: linear-gradient(135deg, #e0eafc, #cfdef3);
+  background: linear-gradient(135deg, #0d1016, #141923 48%, #0c0f15);
   display: flex;
   justify-content: center;
   align-items: center;
   padding: 32px 16px 72px;
 }
 
+.register-card {
+  width: min(520px, 100%);
+  min-height: 620px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: linear-gradient(0deg, #000, #272727);
+  border-radius: 22px;
+  position: relative;
+  isolation: isolate;
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.28);
+}
+
+.register-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  border-radius: inherit;
+  background: linear-gradient(45deg, #fb0094, #0000ff, #00ff00, #ffff00, #ff0000, #fb0094, #0000ff, #00ff00, #ffff00, #ff0000);
+  background-size: 400%;
+  z-index: -1;
+  animation: steam 20s linear infinite;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
 .register-form {
-  width: 420px;
-  max-width: 100%;
+  width: 100%;
+  max-width: 420px;
 }
 
 .form {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
   padding: 2em;
-  background-color: #171717;
-  border-radius: 25px;
-  transition: 0.4s ease-in-out;
+  background:
+    linear-gradient(180deg, rgba(18, 20, 26, 0.92), rgba(12, 14, 19, 0.96));
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 40px rgba(0, 0, 0, 0.35);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
 }
 
 .form:hover {
-  transform: scale(1.02);
-  border: 1px solid #fff;
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 22px 48px rgba(0, 0, 0, 0.42);
 }
 
 #heading {
@@ -239,13 +282,14 @@ getCode()
 :deep(.register-form .el-input__wrapper) {
   min-height: 48px;
   padding: 0 16px;
-  border-radius: 25px;
-  background-color: #1f1f1f;
-  box-shadow: inset 2px 5px 10px rgb(5, 5, 5) !important;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid transparent;
 }
 
 :deep(.register-form .el-input__wrapper.is-focus) {
-  box-shadow: inset 2px 5px 10px rgb(5, 5, 5), 0 0 0 1px #4c9eff !important;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.04), 0 0 0 1px rgba(76, 158, 255, 0.9) !important;
 }
 
 :deep(.register-form .el-input__inner) {
@@ -277,9 +321,10 @@ getCode()
 .register-code {
   width: 120px;
   height: 48px;
-  border-radius: 10px;
+  border-radius: 14px;
   overflow: hidden;
   flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .register-code-img {
@@ -305,15 +350,16 @@ getCode()
   height: 44px;
   margin-left: 0;
   border: none;
-  border-radius: 8px;
-  background: #252525;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #121722, #242a37);
   color: #fff;
   font-weight: 600;
-  transition: 0.4s ease-in-out;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: 0.3s ease-in-out;
 }
 
 :deep(.register-action-item .el-button:hover) {
-  background: #000;
+  background: linear-gradient(135deg, #1a2230, #2f3848);
   color: #fff;
 }
 
@@ -327,7 +373,7 @@ getCode()
 }
 
 .link-type {
-  color: #4c9eff;
+  color: #87b8ff;
   text-decoration: none;
   font-size: 14px;
 }
@@ -349,14 +395,34 @@ getCode()
   letter-spacing: 1px;
 }
 
+@keyframes steam {
+  0% {
+    background-position: 0 0;
+  }
+
+  50% {
+    background-position: 400% 0;
+  }
+
+  100% {
+    background-position: 0 0;
+  }
+}
+
 @media (max-width: 520px) {
   .register {
     padding: 24px 12px 72px;
   }
 
+  .register-card {
+    min-height: auto;
+    padding: 14px;
+    border-radius: 18px;
+  }
+
   .form {
     padding: 1.5em;
-    border-radius: 20px;
+    border-radius: 16px;
   }
 
   :deep(.captcha-form-item .el-form-item__content) {
