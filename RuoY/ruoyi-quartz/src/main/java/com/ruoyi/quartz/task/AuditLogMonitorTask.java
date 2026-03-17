@@ -54,7 +54,7 @@ public class AuditLogMonitorTask {
             log.info("【审计日志监控】当前大小: {} MB, 告警阈值: {} MB", currentSizeMb, thresholdMb);
 
             // 3. 判断并触发告警
-            if (currentSizeMb >= thresholdMb) {
+            if (currentSizeMb >= thresholdMb * 0.8) {
                 triggerAlert(currentSizeMb, thresholdMb);
                 // 超过阈值时，自动将 12 个月前的日志备份到硬盘，并从数据库删除
                 logArchiveService.archiveAndCleanOldLogs(12);
@@ -70,7 +70,7 @@ public class AuditLogMonitorTask {
      * 触发告警逻辑
      */
     private void triggerAlert(double currentSize, double threshold) {
-        String msg = String.format("【安全预警】系统审计日志存储空间已达临界值！当前大小: %.2f MB，设定的阈值: %.2f MB。请超级管理员尽快进行清理，防止系统存储爆满！",
+        String msg = String.format("【安全预警】系统审计日志存储空间已达临界值！当前大小: %.2f MB，设定的阈值: %.2f MB。请管理员尽快进行清理，防止系统存储爆满！",
                 currentSize, threshold);
 
         // 1. 打印 Error 日志
