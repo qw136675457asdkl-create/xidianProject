@@ -41,7 +41,7 @@ public class SysRegisterService
      */
     public String register(RegisterBody registerBody)
     {
-        String msg = "", username = registerBody.getUsername(), password = registerBody.getPassword();
+        String msg = "", username = registerBody.getUsername(), nickName = registerBody.getNickName(), password = registerBody.getPassword();
         SysUser sysUser = new SysUser();
         sysUser.setUserName(username);
 
@@ -54,7 +54,11 @@ public class SysRegisterService
 
         if (StringUtils.isEmpty(username))
         {
-            msg = "用户名不能为空";
+            msg = "工号不能为空";
+        }
+        else if (StringUtils.isEmpty(nickName))
+        {
+            msg = "用户名称不能为空";
         }
         else if (StringUtils.isEmpty(password))
         {
@@ -63,7 +67,11 @@ public class SysRegisterService
         else if (username.length() < UserConstants.USERNAME_MIN_LENGTH
                 || username.length() > UserConstants.USERNAME_MAX_LENGTH)
         {
-            msg = "账户长度必须在2到20个字符之间";
+            msg = "工号长度必须在2到20个字符之间";
+        }
+        else if (nickName.length() > 30)
+        {
+            msg = "用户名称长度不能超过30个字符";
         }
         else if (password.length() < UserConstants.PASSWORD_MIN_LENGTH
                 || password.length() > UserConstants.PASSWORD_MAX_LENGTH)
@@ -72,11 +80,11 @@ public class SysRegisterService
         }
         else if (!userService.checkUserNameUnique(sysUser))
         {
-            msg = "保存用户'" + username + "'失败，注册账号已存在";
+            msg = "保存工号'" + username + "'失败，工号已存在";
         }
         else
         {
-            sysUser.setNickName(username);
+            sysUser.setNickName(nickName);
             sysUser.setPwdUpdateDate(DateUtils.getNowDate());
             sysUser.setPassword(SecurityUtils.encryptPassword(password));
             boolean regFlag = userService.registerUser(sysUser);

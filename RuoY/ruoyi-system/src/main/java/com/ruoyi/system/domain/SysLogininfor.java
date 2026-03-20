@@ -19,8 +19,8 @@ public class SysLogininfor extends BaseEntity
     @Excel(name = "序号", cellType = ColumnType.NUMERIC)
     private Long infoId;
 
-    /** 用户账号 */
-    @Excel(name = "用户账号")
+    /** 工号 */
+    @Excel(name = "工号")
     private String userName;
 
     /** 登录状态 0成功 1失败 */

@@ -1,6 +1,6 @@
 <template>
   <el-form ref="userRef" :model="form" :rules="rules" label-width="80px">
-    <el-form-item label="用户昵称" prop="nickName">
+    <el-form-item label="用户名称" prop="nickName">
       <el-input v-model="form.nickName" maxlength="30" />
     </el-form-item>
     <el-form-item label="手机号码" prop="phonenumber">
@@ -35,7 +35,7 @@ const { proxy } = getCurrentInstance()
 
 const form = ref({})
 const rules = ref({
-  nickName: [{ required: true, message: "用户昵称不能为空", trigger: "blur" }],
+  nickName: [{ required: true, message: "用户名称不能为空", trigger: "blur" }],
   email: [
     { required: true, message: "邮箱地址不能为空", trigger: "blur" },
     { type: "email", message: "请输入正确的邮箱地址", trigger: ["blur", "change"] }
@@ -51,6 +51,7 @@ function submit() {
     if (valid) {
       updateUserProfile(form.value).then(() => {
         proxy.$modal.msgSuccess("修改成功")
+        props.user.nickName = form.value.nickName
         props.user.phonenumber = form.value.phonenumber
         props.user.email = form.value.email
       })

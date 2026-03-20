@@ -10,11 +10,12 @@
         <module name="ruoyi-system" />
         <module name="xidianProjcet" />
         <module name="ruoyi-common" />
-        <module name="ruoyi-generator" />
         <module name="ruoyi-quartz" />
         <module name="ruoyi-admin" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel target="11" />
+    <bytecodeTargetLevel target="11">
+      <module name="ruoyi-generator" target="11" />
+    </bytecodeTargetLevel>
   </component>
 </project>

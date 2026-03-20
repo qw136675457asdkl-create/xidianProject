@@ -8,14 +8,18 @@
               <userAvatar />
             </div>
             <div class="profile-main">
-              <p class="profile-name">{{ state.user.nickName || state.user.userName || "未设置昵称" }}</p>
+              <p class="profile-name">{{ state.user.nickName || state.user.userName || "未设置用户名称" }}</p>
               <p class="profile-sub">{{ state.user.userName || "--" }}</p>
             </div>
           </div>
 
           <div class="profile-content">
             <div class="profile-row">
-              <span class="profile-label"><svg-icon icon-class="user" /> 用户名称</span>
+              <span class="profile-label"><svg-icon icon-class="peoples" /> 用户名称</span>
+              <span class="profile-value">{{ state.user.nickName || "--" }}</span>
+            </div>
+            <div class="profile-row">
+              <span class="profile-label"><svg-icon icon-class="user" /> 工号</span>
               <span class="profile-value">{{ state.user.userName || "--" }}</span>
             </div>
             <div class="profile-row">

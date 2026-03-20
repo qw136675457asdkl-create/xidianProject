@@ -14,9 +14,22 @@
             size="large"
             name="register_username"
             autocomplete="off"
-            placeholder="账号"
+            placeholder="工号"
           >
             <template #prefix><svg-icon icon-class="user" class="el-input__icon input-icon" /></template>
+          </el-input>
+        </el-form-item>
+
+        <el-form-item prop="nickName" class="custom-form-item">
+          <el-input
+            v-model="registerForm.nickName"
+            type="text"
+            size="large"
+            name="register_nick_name"
+            autocomplete="off"
+            placeholder="用户名称"
+          >
+            <template #prefix><svg-icon icon-class="peoples" class="el-input__icon input-icon" /></template>
           </el-input>
         </el-form-item>
 
@@ -100,6 +113,7 @@ const { proxy } = getCurrentInstance()
 
 const registerForm = ref({
   username: "",
+  nickName: "",
   password: "",
   confirmPassword: "",
   code: "",
@@ -116,8 +130,12 @@ const equalToPassword = (rule, value, callback) => {
 
 const registerRules = {
   username: [
-    { required: true, trigger: "blur", message: "请输入您的账号" },
-    { min: 2, max: 20, message: "用户账号长度必须介于 2 和 20 之间", trigger: "blur" }
+    { required: true, trigger: "blur", message: "请输入您的工号" },
+    { min: 2, max: 20, message: "工号长度必须介于 2 和 20 之间", trigger: "blur" }
+  ],
+  nickName: [
+    { required: true, trigger: "blur", message: "请输入用户名称" },
+    { min: 1, max: 30, message: "用户名称长度必须介于 1 和 30 之间", trigger: "blur" }
   ],
   password: [
     { required: true, trigger: "blur", message: "请输入您的密码" },
@@ -141,7 +159,7 @@ function handleRegister() {
       loading.value = true
       register(registerForm.value).then(res => {
         const username = registerForm.value.username
-        ElMessageBox.alert(`<font color='red'>恭喜你，您的账号 ${username} 注册成功！</font>`, "系统提示", {
+        ElMessageBox.alert(`<font color='red'>恭喜你，您的工号 ${username} 注册成功！</font>`, "系统提示", {
           dangerouslyUseHTMLString: true,
           type: "success",
         }).then(() => {

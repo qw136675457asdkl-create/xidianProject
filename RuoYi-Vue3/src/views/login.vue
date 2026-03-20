@@ -38,7 +38,7 @@
                 <input
                   v-model="loginForm.username"
                   autocomplete="off"
-                  placeholder="账号"
+                  placeholder="工号"
                   class="input-field"
                   type="text"
                 />
@@ -164,7 +164,7 @@ const loginForm = ref({
 })
 
 const loginRules = {
-  username: [{ required: true, trigger: "blur", message: "请输入您的账号" }],
+  username: [{ required: true, trigger: "blur", message: "请输入您的工号" }],
   password: [{ required: true, trigger: "blur", message: "请输入您的密码" }],
   code: [{ required: true, trigger: "change", message: "请输入验证码" }]
 }
