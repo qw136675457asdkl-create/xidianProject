@@ -111,13 +111,13 @@ public class SysLoginService
         }
 
         LoginUser loginUser = (LoginUser) authentication.getPrincipal();
-        boolean concurrentLoginRisk = hasAnotherLoginUser(loginUser.getUsername());
+        //boolean concurrentLoginRisk = hasAnotherLoginUser(loginUser.getUsername());
         AsyncManager.me().execute(
                 AsyncFactory.recordLogininfor(
                         loginUser.getUsername(),
                         Constants.LOGIN_SUCCESS,
                         MessageUtils.message("user.login.success"),
-                        concurrentLoginRisk
+                        false
                 )
         );
 
@@ -207,6 +207,7 @@ public class SysLoginService
 //            );
             throw new UserAlreadyLoginException();
         }
+        deleteLoginCache(username);
     }
 
     /**
@@ -265,5 +266,16 @@ public class SysLoginService
     {
         String userKey = CacheConstants.LOGIN_USER_TOKEN + username;
         return redisCache.getCacheObject(userKey) != null;
+    }
+
+    private void deleteLoginCache(String username)
+    {
+        for(String key : redisCache.keys(LOGIN_TOKEN_KEY + "*")){
+            LoginUser loginUser = redisCache.getCacheObject(key);
+            if(loginUser != null && StringUtils.equalsIgnoreCase(loginUser.getUsername(), username)){
+                redisCache.deleteObject(key);
+            }
+        }
+        redisCache.deleteObject(CacheConstants.LOGIN_USER_TOKEN + username);
     }
 }

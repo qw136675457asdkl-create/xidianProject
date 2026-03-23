@@ -13,3 +13,11 @@ export function previewLog(logName) {
     method: 'post',
   })
 }
+
+export function downloadLog(fileName) {
+  return request({
+    url: '/monitor/system/log/download/' + fileName,
+    method: 'post',
+    responseType: 'blob'
+  })
+}

@@ -75,7 +75,8 @@ public class SysLoginController
         online.setActiveTime(System.currentTimeMillis());
         online.setUserName(loginBody.getUsername());
         ajax.put(Constants.TOKEN, token);
-        redisCache.setCacheObject(CacheConstants.LOGIN_USER_TOKEN + loginBody.getUsername(), online, 150, TimeUnit.SECONDS);
+        final String key = CacheConstants.LOGIN_USER_TOKEN + loginBody.getUsername();
+        redisCache.setCacheObject(key, online, 150, TimeUnit.SECONDS);
         return ajax;
     }
 

@@ -21,8 +21,12 @@
             <el-button link type="primary" @click="handlePreview(row)" v-hasPermi="['monitor:systemLog:preview']">
               预览
             </el-button>
+            <el-button link type="info" @click="handleDownload(row)" v-hasPermi="['monitor:systemLog:download']">
+              下载
+            </el-button>
           </template>
         </el-table-column>
+
       </el-table>
     </el-card>
 
@@ -36,7 +40,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { listSysLogs, previewLog } from '@/api/monitor/sysLog'
+import { listSysLogs, previewLog, downloadLog } from '@/api/monitor/sysLog'
 
 const loading = ref(false)
 const fileList = ref([])
@@ -91,6 +95,23 @@ function handlePreview(row) {
     })
     .catch(() => {
       ElMessage.error('预览失败')
+    })
+}
+function handleDownload(row) {
+  const fileName = getFileName(row)
+  downloadLog(fileName)
+    .then((res) => {
+      const url = URL.createObjectURL(new Blob([res]))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    })
+    .catch(() => {
+      ElMessage.error('下载失败')
     })
 }
 </script>
