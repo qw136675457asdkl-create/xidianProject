@@ -65,4 +65,6 @@ public interface IDExperimentInfoService
     List<TreeTableVo> selectDExperimentInfoTree(TreeTableVo treeTableVo);
 
     List<TreeTableVo> getExperimentInfoTree();
+
+    String getExperimentPath(String experimentId);
 }

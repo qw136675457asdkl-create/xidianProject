@@ -437,4 +437,10 @@ public class DExperimentInfoServiceImpl implements IDExperimentInfoService
             return stream.findAny().isPresent();
         }
     }
+    public String getExperimentPath(String experimentId){
+        DExperimentInfo experimentInfo = dExperimentInfoMapper.selectDExperimentInfoByExperimentId(experimentId);
+        String experimentPath = experimentInfo.getPath();
+        String projectPath = requireProject(experimentInfo.getProjectId()).getPath();
+        return profile + projectPath + experimentPath;
+    }
 }

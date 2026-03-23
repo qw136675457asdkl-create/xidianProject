@@ -227,4 +227,14 @@ public class DExperimentInfoController extends BaseController
         }
         throw new ServiceException("Unsupported info type");
     }
+
+    @GetMapping("/path/{experimentId}")
+    public AjaxResult getExperimentPathById(@PathVariable String experimentId)
+    {
+        if (experimentId == null || experimentId.trim().isEmpty())
+        {
+            throw new ServiceException("试验id不能为空");
+        }
+        return AjaxResult.success(dExperimentInfoService.getExperimentPath(experimentId));
+    }
 }
