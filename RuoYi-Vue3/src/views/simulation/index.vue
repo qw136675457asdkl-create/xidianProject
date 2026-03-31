@@ -288,7 +288,7 @@ function getBaseModuleUrl() {
 function handleView(row) {
   const baseUrl = getBaseModuleUrl()
   const separator = baseUrl.includes('?') ? '&' : '?'
-  moduleUrl.value = baseUrl ? `${baseUrl}${separator}workflowId=${row.experimentId}` : ''
+  moduleUrl.value = baseUrl ? `${baseUrl}${separator}workflowId=${row.experimentId}&type=ex` : ''
   dialogMode.value = 'large'
   dialogVisible.value = true
 }
