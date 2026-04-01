@@ -6,6 +6,8 @@ import { startHeartbeat, stopHeartbeat } from '@/utils/heartbeat'
 import { isHttp, isEmpty } from "@/utils/validate"
 import defAva from '@/assets/images/profile.jpg'
 
+const DEFAULT_PASSWORD_VALIDATE_DAYS = 90
+
 const useUserStore = defineStore(
   'user',
   {
@@ -16,9 +18,43 @@ const useUserStore = defineStore(
       nickName: '',
       avatar: '',
       roles: [],
-      permissions: []
+      permissions: [],
+      isDefaultModifyPwd: false,
+      isPasswordExpired: false,
+      passwordValidateDays: DEFAULT_PASSWORD_VALIDATE_DAYS,
+      passwordPolicyPromptShown: false
     }),
+    getters: {
+      mustChangePassword: (state) => state.isDefaultModifyPwd || state.isPasswordExpired
+    },
     actions: {
+      clearPasswordPolicy() {
+        this.isDefaultModifyPwd = false
+        this.isPasswordExpired = false
+        this.passwordValidateDays = DEFAULT_PASSWORD_VALIDATE_DAYS
+        this.passwordPolicyPromptShown = false
+      },
+      showPasswordPolicyPrompt() {
+        if (!this.mustChangePassword || this.passwordPolicyPromptShown) {
+          return
+        }
+        this.passwordPolicyPromptShown = true
+        const message = this.isDefaultModifyPwd
+          ? '您的密码仍为初始密码，请先修改密码后再继续使用系统。'
+          : `您的密码已超过 ${this.passwordValidateDays || DEFAULT_PASSWORD_VALIDATE_DAYS} 天未修改，请先修改密码后再继续使用系统。`
+        ElMessageBox.alert(message, '安全提示', {
+          confirmButtonText: '去修改',
+          type: 'warning',
+          showClose: false,
+          closeOnClickModal: false,
+          closeOnPressEscape: false
+        }).then(() => {
+          const currentRoute = router.currentRoute.value
+          if (currentRoute.name !== 'Profile' || currentRoute.params?.activeTab !== 'resetPwd') {
+            router.push({ name: 'Profile', params: { activeTab: 'resetPwd' } }).catch(() => {})
+          }
+        }).catch(() => {})
+      },
       // 登录
       login(userInfo) {
         const username = userInfo.username.trim()
@@ -27,6 +63,7 @@ const useUserStore = defineStore(
         const uuid = userInfo.uuid
         return new Promise((resolve, reject) => {
           login(username, password, code, uuid).then(res => {
+            this.clearPasswordPolicy()
             setToken(res.token)
             this.token = res.token
             startHeartbeat()
@@ -55,18 +92,15 @@ const useUserStore = defineStore(
             this.name = user.userName
             this.nickName = user.nickName
             this.avatar = avatar
-            /* 初始密码提示 */
-            if(res.isDefaultModifyPwd) {
-              ElMessageBox.confirm('您的密码还是初始密码，请修改密码！',  '安全提示', {  confirmButtonText: '确定',  cancelButtonText: '取消',  type: 'warning' }).then(() => {
-                router.push({ name: 'Profile', params: { activeTab: 'resetPwd' } })
-              }).catch(() => {})
+            this.isDefaultModifyPwd = !!res.isDefaultModifyPwd
+            this.isPasswordExpired = !!res.isPasswordExpired
+            this.passwordValidateDays = Number(res.passwordValidateDays) > 0
+              ? Number(res.passwordValidateDays)
+              : DEFAULT_PASSWORD_VALIDATE_DAYS
+            if (!this.mustChangePassword) {
+              this.passwordPolicyPromptShown = false
             }
-            /* 过期密码提示 */
-            if(!res.isDefaultModifyPwd && res.isPasswordExpired) {
-              ElMessageBox.confirm('您的密码已过期，请尽快修改密码！',  '安全提示', {  confirmButtonText: '确定',  cancelButtonText: '取消',  type: 'warning' }).then(() => {
-                router.push({ name: 'Profile', params: { activeTab: 'resetPwd' } })
-              }).catch(() => {})
-            }
+            this.showPasswordPolicyPrompt()
             resolve(res)
           }).catch(error => {
             reject(error)
@@ -80,6 +114,7 @@ const useUserStore = defineStore(
             this.token = ''
             this.roles = []
             this.permissions = []
+            this.clearPasswordPolicy()
             removeToken()
             stopHeartbeat()
             resolve()

@@ -18,6 +18,19 @@ const isWhiteList = (path) => {
   return whiteList.some(pattern => isPathMatch(pattern, path))
 }
 
+const handlePasswordPolicyRedirect = (to, next) => {
+  const userStore = useUserStore()
+  if (!userStore.mustChangePassword) {
+    return false
+  }
+  if (to.name === 'Profile' && to.params?.activeTab === 'resetPwd') {
+    return false
+  }
+  next({ name: 'Profile', params: { activeTab: 'resetPwd' }, replace: true })
+  NProgress.done()
+  return true
+}
+
 router.beforeEach((to, from, next) => {
   NProgress.start()
   if (getToken()) {
@@ -42,6 +55,9 @@ router.beforeEach((to, from, next) => {
                 router.addRoute(route) // 动态添加可访问路由表
               }
             })
+            if (handlePasswordPolicyRedirect(to, next)) {
+              return
+            }
             next({ ...to, replace: true }) // hack方法 确保addRoutes已完成
           })
         }).catch(err => {
@@ -51,6 +67,9 @@ router.beforeEach((to, from, next) => {
           })
         })
       } else {
+        if (handlePasswordPolicyRedirect(to, next)) {
+          return
+        }
         next()
       }
     }

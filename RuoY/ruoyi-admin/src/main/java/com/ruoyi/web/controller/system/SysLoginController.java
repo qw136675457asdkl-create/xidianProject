@@ -39,6 +39,8 @@ import javax.servlet.http.HttpServletRequest;
 @RestController
 public class SysLoginController
 {
+    private static final int DEFAULT_PASSWORD_VALIDATE_DAYS = 90;
+
     @Autowired
     private SysLoginService loginService;
 
@@ -90,6 +92,8 @@ public class SysLoginController
         SysUser user = loginUser.getUser();
         Set<String> roles = permissionService.getRolePermission(user);
         Set<String> permissions = permissionService.getMenuPermission(user);
+        boolean isDefaultModifyPwd = initPasswordIsModify(user.getPwdUpdateDate());
+        boolean isPasswordExpired = passwordIsExpiration(user.getPwdUpdateDate());
         if (!loginUser.getPermissions().equals(permissions))
         {
             loginUser.setPermissions(permissions);
@@ -99,8 +103,9 @@ public class SysLoginController
         ajax.put("user", user);
         ajax.put("roles", roles);
         ajax.put("permissions", permissions);
-        ajax.put("isDefaultModifyPwd", initPasswordIsModify(user.getPwdUpdateDate()));
-        ajax.put("isPasswordExpired", passwordIsExpiration(user.getPwdUpdateDate()));
+        ajax.put("isDefaultModifyPwd", isDefaultModifyPwd);
+        ajax.put("isPasswordExpired", isPasswordExpired);
+        ajax.put("passwordValidateDays", getPasswordValidateDays());
         return ajax;
     }
 
@@ -135,17 +140,26 @@ public class SysLoginController
 
     public boolean passwordIsExpiration(Date pwdUpdateDate)
     {
-        Integer passwordValidateDays = Convert.toInt(configService.selectConfigByKey("sys.account.passwordValidateDays"));
-        if (passwordValidateDays != null && passwordValidateDays > 0)
+        int passwordValidateDays = getPasswordValidateDays();
+        if (StringUtils.isNull(pwdUpdateDate))
         {
-            if (StringUtils.isNull(pwdUpdateDate))
-            {
-                return true;
-            }
-            Date nowDate = DateUtils.getNowDate();
-            return DateUtils.differentDaysByMillisecond(nowDate, pwdUpdateDate) > passwordValidateDays;
+            return true;
         }
-        return false;
+        Date nowDate = DateUtils.getNowDate();
+        return DateUtils.differentDaysByMillisecond(nowDate, pwdUpdateDate) >= passwordValidateDays;
+    }
+
+    public int getPasswordValidateDays()
+    {
+        Integer passwordValidateDays = Convert.toInt(
+                configService.selectConfigByKey("sys.account.passwordValidateDays"),
+                DEFAULT_PASSWORD_VALIDATE_DAYS
+        );
+        if (passwordValidateDays == null || passwordValidateDays <= 0)
+        {
+            return DEFAULT_PASSWORD_VALIDATE_DAYS;
+        }
+        return passwordValidateDays;
     }
 
     public void heartbeat(LoginUser loginUser)

@@ -47,8 +47,16 @@
           <template #header>
             <div class="card-title">基本资料</div>
           </template>
+          <el-alert
+            v-if="mustChangePassword"
+            class="password-policy-alert"
+            type="warning"
+            :closable="false"
+            show-icon
+            :title="passwordPolicyTitle"
+          />
           <el-tabs v-model="selectedTab" class="profile-tabs">
-            <el-tab-pane label="基本资料" name="userinfo">
+            <el-tab-pane label="基本资料" name="userinfo" :disabled="mustChangePassword">
               <userInfo :user="state.user" />
             </el-tab-pane>
             <el-tab-pane label="修改密码" name="resetPwd">
@@ -66,13 +74,22 @@ import userAvatar from "./userAvatar"
 import userInfo from "./userInfo"
 import resetPwd from "./resetPwd"
 import { getUserProfile } from "@/api/system/user"
+import useUserStore from "@/store/modules/user"
 
 const route = useRoute()
+const userStore = useUserStore()
 const selectedTab = ref("userinfo")
 const state = reactive({
   user: {},
   roleGroup: {},
   postGroup: {}
+})
+const mustChangePassword = computed(() => userStore.mustChangePassword)
+const passwordPolicyTitle = computed(() => {
+  if (userStore.isDefaultModifyPwd) {
+    return "当前仍在使用初始密码，请先完成密码修改。"
+  }
+  return `当前密码已超过 ${userStore.passwordValidateDays || 90} 天未修改，请先完成密码修改。`
 })
 
 function getUser() {
@@ -83,11 +100,26 @@ function getUser() {
   })
 }
 
-onMounted(() => {
-  const activeTab = route.params && route.params.activeTab
-  if (activeTab) {
-    selectedTab.value = activeTab
+function syncSelectedTab() {
+  if (mustChangePassword.value) {
+    selectedTab.value = "resetPwd"
+    return
   }
+  const activeTab = route.params && route.params.activeTab
+  selectedTab.value = activeTab || "userinfo"
+}
+
+watch(() => [route.params.activeTab, mustChangePassword.value], () => {
+  syncSelectedTab()
+}, { immediate: true })
+
+watch(selectedTab, (value) => {
+  if (mustChangePassword.value && value !== "resetPwd") {
+    selectedTab.value = "resetPwd"
+  }
+})
+
+onMounted(() => {
   getUser()
 })
 </script>
@@ -212,6 +244,10 @@ onMounted(() => {
     font-size: 16px;
     font-weight: 700;
     color: #303133;
+  }
+
+  .password-policy-alert {
+    margin-bottom: 18px;
   }
 
   @media (max-width: 767px) {

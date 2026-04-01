@@ -11,16 +11,20 @@
     </el-form-item>
     <el-form-item>
       <el-button type="primary" @click="submit">保存</el-button>
-      <el-button type="danger" @click="close">关闭</el-button>
+      <el-button type="danger" @click="close">{{ mustChangePassword ? "退出登录" : "关闭" }}</el-button>
     </el-form-item>
   </el-form>
 </template>
 
 <script setup>
 import { updateUserPwd } from "@/api/system/user"
+import useUserStore from "@/store/modules/user"
 
 const { proxy } = getCurrentInstance()
+const router = useRouter()
+const userStore = useUserStore()
 const pwdRef = ref()
+const mustChangePassword = computed(() => userStore.mustChangePassword)
 
 const user = reactive({
   oldPassword: undefined,
@@ -88,13 +92,24 @@ function submit() {
   pwdRef.value?.validate(valid => {
     if (valid) {
       updateUserPwd(user.oldPassword, user.newPassword).then(() => {
+        userStore.clearPasswordPolicy()
         proxy.$modal.msgSuccess("修改成功")
+        user.oldPassword = undefined
+        user.newPassword = undefined
+        user.confirmPassword = undefined
+        router.replace({ name: "Profile", params: { activeTab: "userinfo" } })
       })
     }
   })
 }
 
 function close() {
+  if (mustChangePassword.value) {
+    userStore.logOut().finally(() => {
+      router.replace("/login")
+    })
+    return
+  }
   proxy.$tab.closePage()
 }
 </script>
