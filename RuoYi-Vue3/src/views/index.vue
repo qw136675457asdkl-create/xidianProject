@@ -218,9 +218,9 @@ const arrowIcon = ElementPlusIconsVue.ArrowRight || ElementPlusIconsVue.Right ||
 const commandCards = [
   {
     key: 'data',
-    title: '数据工作台',
+    title: '数据管理',
     description: '统一管理项目、试验与数据资产。',
-    path: '/data',
+    path: '/bussiness',
     accent: '#12b886',
     icon: ElementPlusIconsVue.FolderOpened || ElementPlusIconsVue.Document || ElementPlusIconsVue.Tickets
   },
@@ -244,7 +244,7 @@ const commandCards = [
     key: 'logs',
     title: '系统日志',
     description: '按文件、级别和内容定位问题线索。',
-    path: '/monitor/systemLog',
+    path: '/system/log/systemLog',
     accent: '#e03131',
     icon: ElementPlusIconsVue.Document || ElementPlusIconsVue.Tickets || ElementPlusIconsVue.Monitor
   },
@@ -866,7 +866,13 @@ const handleResize = () => {
 }
 
 const goTo = (path) => {
-  router.push(path).catch(() => {})
+  if (!path) {
+    return
+  }
+
+  router.push(path).catch((error) => {
+    console.error('Failed to navigate:', path, error)
+  })
 }
 
 onMounted(() => {
