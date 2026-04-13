@@ -426,7 +426,7 @@ body {
 .login-form {
   position: relative;
   z-index: 3;
-  width: min(430px, calc(100% - 72px));
+  width: min(560px, calc(100% - 72px));
 }
 
 .form {
@@ -456,9 +456,10 @@ body {
   text-align: center;
   margin: 0 0 8px;
   color: #fff;
-  font-size: 1.5em;
+  font-size: clamp(18px, 2vw, 24px);
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .custom-form-item {

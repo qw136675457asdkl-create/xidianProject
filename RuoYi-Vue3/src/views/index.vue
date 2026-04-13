@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="app-container command-home">
     <section class="hero-panel">
       <div class="hero-orbit hero-orbit--one"></div>
@@ -8,11 +8,11 @@
         <p class="hero-copy__eyebrow">System Command Deck</p>
         <h1 class="hero-copy__title">
           体系协同多源识别
-          <span>算法分析与优化平台</span>
+          <span>算法分析与优化软件</span>
         </h1>
 <!--        <p class="hero-copy__summary">-->
-<!--          首页不再只是“欢迎页”，而是把数据接入、仿真推演、模型配置、日志定位与服务态势收拢到同一张工作台上。-->
-<!--        </p>-->
+<!--          妫ｆ牠銆夋稉宥呭晙閸欘亝妲搁垾婊勵偨鏉╁酣銆夐垾婵撶礉閼板本妲搁幎濠冩殶閹诡喗甯撮崗銉ｂ偓浣疯雹閻喐甯瑰鏂烩偓浣鼓侀崹瀣帳缂冾喓鈧焦妫╄箛妤€鐣炬担宥勭瑢閺堝秴濮熼幀浣稿◢閺€鑸靛珴閸掓澘鎮撴稉鈧鐘蹭紣娴ｆ粌褰存稉濞库偓?->
+<!-       </p>-->
 
         <div class="hero-copy__meta">
           <span class="meta-pill">{{ greetingText }}，{{ userDisplayName }}</span>
@@ -97,7 +97,7 @@
           <div>
             <p class="surface-card__eyebrow">Quick Entry</p>
             <h3 class="surface-card__title">快捷入口</h3>
-<!--            <p class="surface-card__description">把常用的大页面前置到首页，减少来回切换成本。</p>-->
+<!--            <p class="surface-card__description">閹跺﹤鐖堕悽銊ф畱婢堆囥€夐棃銏犲缂冾喖鍩屾＃鏍€夐敍灞藉櫤鐏忔垶娼甸崶鐐插瀼閹广垺鍨氶張顑锯偓?/p>-->
           </div>
         </div>
 
@@ -122,72 +122,6 @@
         </div>
       </el-card>
 
-      <el-card class="surface-card surface-card--workflow" shadow="never">
-        <div class="surface-card__head">
-          <div>
-            <p class="surface-card__eyebrow">Algorithm Storyline</p>
-            <h3 class="surface-card__title">协同识别主链路</h3>
-<!--            <p class="surface-card__description">首页要解释系统正在做什么，而不只是告诉用户系统“还活着”。</p>-->
-          </div>
-        </div>
-
-        <div ref="workflowChartRef" class="workflow-chart"></div>
-
-        <div class="workflow-step-list">
-          <div
-            v-for="item in workflowSteps"
-            :key="item.title"
-            class="workflow-step"
-            :style="{ '--accent': item.accent }"
-          >
-            <span class="workflow-step__index">{{ item.stage }}</span>
-            <strong class="workflow-step__title">{{ item.title }}</strong>
-            <span class="workflow-step__desc">{{ item.description }}</span>
-          </div>
-        </div>
-      </el-card>
-
-      <el-card class="surface-card surface-card--focus" shadow="never">
-        <div class="surface-card__head">
-          <div>
-            <p class="surface-card__eyebrow">Today Focus</p>
-            <h3 class="surface-card__title">今日聚焦</h3>
-<!--            <p class="surface-card__description">让首页给出结论、建议和下一步动作，而不是只陈列指标。</p>-->
-          </div>
-        </div>
-
-        <div class="focus-list">
-          <article
-            v-for="item in focusCards"
-            :key="item.eyebrow"
-            class="focus-card"
-          >
-            <span class="focus-card__eyebrow">{{ item.eyebrow }}</span>
-            <strong class="focus-card__title">{{ item.title }}</strong>
-            <p class="focus-card__desc">{{ item.description }}</p>
-
-          </article>
-        </div>
-
-        <div class="alert-list">
-          <div
-            v-for="item in activeSignals"
-            :key="item"
-            class="alert-chip"
-          >
-            {{ item }}
-          </div>
-        </div>
-
-        <div class="focus-actions">
-          <el-button type="primary" class="focus-action" @click="goTo(recommendedCommand.path)">
-            前往 {{ recommendedCommand.title }}
-          </el-button>
-          <el-button class="focus-action focus-action--ghost" @click="refreshResourceData">
-            重新采集资源
-          </el-button>
-        </div>
-      </el-card>
     </section>
   </div>
 </template>
@@ -235,9 +169,9 @@ const commandCards = [
   },
   {
     key: 'ml',
-    title: '机器学习',
+    title: '数据分析',
     description: '配置模型参数、策略与训练方向。',
-    path: '/MachineLearning',
+    path: '/dataAnalytical?url=http://10.1.22.71:8089/home/dataSourceAnaly&name=数据分析',
     accent: '#f08c00',
     icon: ElementPlusIconsVue.TrendCharts || ElementPlusIconsVue.Histogram || ElementPlusIconsVue.Cpu
   },
@@ -259,40 +193,6 @@ const commandCards = [
   }
 ]
 
-const workflowSteps = [
-  {
-    stage: '01',
-    title: '多源接入',
-    description: '雷达、红外、频谱等异构数据统一接入。',
-    accent: '#4ecdc4'
-  },
-  {
-    stage: '02',
-    title: '预处理',
-    description: '完成校时、清洗、规范化与基础对齐。',
-    accent: '#66d9ff'
-  },
-  {
-    stage: '03',
-    title: '特征提取',
-    description: '抽取时序、空间与语义特征向量。',
-    accent: '#8ce99a'
-  },
-  {
-    stage: '04',
-    title: '协同识别',
-    description: '在融合算法中完成多源判别与推断。',
-    accent: '#ffd166'
-  },
-  {
-    stage: '05',
-    title: '结果优化',
-    description: '回流修正、置信输出并形成最终结果。',
-    accent: '#ff8787'
-  }
-]
-
-const workflowChartRef = ref(null)
 const resourceTrendChartRef = ref(null)
 
 const serverInfo = ref(null)
@@ -390,9 +290,6 @@ const lastUpdatedText = computed(() => lastUpdatedAt.value ? `最近采样 ${las
 const cpuUsage = computed(() => clampPercent(serverInfo.value?.cpu?.used))
 const gpuUsage = computed(() => clampPercent(serverInfo.value?.gpu?.usage))
 const memUsage = computed(() => clampPercent(serverInfo.value?.mem?.usage))
-const netUsage = computed(() => normalizeRate(serverInfo.value?.net?.totalRate))
-const recvRate = computed(() => normalizeRate(serverInfo.value?.net?.recvRate))
-const sentRate = computed(() => normalizeRate(serverInfo.value?.net?.sentRate))
 
 const peakDisk = computed(() => {
   const files = Array.isArray(serverInfo.value?.sysFiles) ? serverInfo.value.sysFiles : []
@@ -467,79 +364,6 @@ const metricCards = computed(() => [
     accent: '#74c0fc'
   }
 ])
-
-const pressureMetrics = computed(() => ([
-  { label: 'CPU', value: cpuUsage.value },
-  { label: 'GPU', value: gpuUsage.value },
-  { label: '内存', value: memUsage.value },
-  { label: '磁盘', value: diskUsage.value }
-]).sort((left, right) => right.value - left.value))
-
-const recommendedCommand = computed(() => {
-  if (loadError.value || cpuUsage.value >= 80 || memUsage.value >= 80 || diskUsage.value >= 85) {
-    return commandCards.find((item) => item.key === 'monitor') || commandCards[0]
-  }
-  if (gpuUsage.value < 60 && memUsage.value < 75) {
-    return commandCards.find((item) => item.key === 'ml') || commandCards[0]
-  }
-  if (netUsage.value < 1024 * 64) {
-    return commandCards.find((item) => item.key === 'simulation') || commandCards[0]
-  }
-  return commandCards.find((item) => item.key === 'data') || commandCards[0]
-})
-
-const activeSignals = computed(() => {
-  if (loadError.value) {
-    return [loadError.value, '建议先确认监控接口和后端服务是否正常返回。']
-  }
-
-  const signals = []
-
-  if (cpuUsage.value >= 80) {
-    signals.push(`CPU 使用率已到 ${formatPercent(cpuUsage.value)}，请关注任务并发与算法计算压力。`)
-  }
-
-  if (memUsage.value >= 80) {
-    signals.push(`内存占用已到 ${formatPercent(memUsage.value)}，建议检查缓存与大对象常驻。`)
-  }
-
-  if (diskUsage.value >= 85 && peakDisk.value?.dirName) {
-    signals.push(`磁盘 ${peakDisk.value.dirName} 占用偏高，当前使用率 ${formatPercent(diskUsage.value)}。`)
-  }
-
-  if (!signals.length) {
-    signals.push(`系统状态平稳，当前总吞吐 ${formatRate(netUsage.value)}。`)
-    signals.push('首页可以直接作为数据管理、实验推进与监控排障的统一入口。')
-  }
-
-  return signals.slice(0, 3)
-})
-
-const focusCards = computed(() => {
-  const primaryPressure = pressureMetrics.value[0]
-
-  return [
-    {
-      eyebrow: '优先关注',
-      title: `${primaryPressure.label} ${formatPercent(primaryPressure.value)}`,
-      description: primaryPressure.value >= 75
-        ? `${primaryPressure.label} 是当前最主要的资源压力点，建议先观察对应模块和链路。`
-        : '主要资源整体温和，当前系统具备继续推进实验和分析任务的余量。'
-    },
-    {
-      eyebrow: '推荐入口',
-      title: recommendedCommand.value.title,
-      description: recommendedCommand.value.description
-    },
-    {
-      eyebrow: '系统脉搏',
-      title: lastUpdatedText.value,
-      description: serverInfo.value?.jvm?.runTime
-        ? `JVM 已持续运行 ${serverInfo.value.jvm.runTime}，网络收 ${formatRate(recvRate.value)}，发 ${formatRate(sentRate.value)}。`
-        : '监控数据返回后，这里会给出运行时长与网络脉搏判断。'
-    }
-  ]
-})
 
 const snapshotItems = computed(() => [
   {
@@ -710,88 +534,6 @@ const getResourceTrendOption = (history = resourceHistory.value) => ({
   ]
 })
 
-const initWorkflowChart = () => {
-  if (!workflowChartRef.value) {
-    return
-  }
-
-  workflowChart = echarts.init(workflowChartRef.value)
-
-  const nodes = [
-    { name: '多源接入', x: 100, y: 200, symbolSize: 76, note: '雷达、红外、频谱统一接入', color: '#4ecdc4' },
-    { name: '雷达信号', x: 250, y: 80, symbolSize: 44, note: '时间序列与轨迹信息', color: '#67e8f9' },
-    { name: '红外图像', x: 250, y: 200, symbolSize: 44, note: '图像特征与目标热特性', color: '#74c0fc' },
-    { name: '无线电频谱', x: 250, y: 320, symbolSize: 44, note: '频域模式与通信特征', color: '#91a7ff' },
-    { name: '预处理', x: 470, y: 200, symbolSize: 72, note: '校时、清洗、归一化', color: '#8ce99a' },
-    { name: '特征提取', x: 670, y: 200, symbolSize: 72, note: '抽取时空与语义特征', color: '#ffd166' },
-    { name: '协同识别', x: 900, y: 200, symbolSize: 82, note: '融合算法完成多源判别', color: '#ffb347' },
-    { name: '结果优化', x: 1120, y: 200, symbolSize: 72, note: '反馈修正与置信强化', color: '#ff8787' },
-    { name: '最终输出', x: 1320, y: 200, symbolSize: 72, note: '形成分析结果与决策支撑', color: '#f783ac' }
-  ]
-
-  const links = [
-    { source: '多源接入', target: '雷达信号' },
-    { source: '多源接入', target: '红外图像' },
-    { source: '多源接入', target: '无线电频谱' },
-    { source: '雷达信号', target: '预处理' },
-    { source: '红外图像', target: '预处理' },
-    { source: '无线电频谱', target: '预处理' },
-    { source: '预处理', target: '特征提取' },
-    { source: '特征提取', target: '协同识别' },
-    { source: '协同识别', target: '结果优化' },
-    { source: '结果优化', target: '最终输出' }
-  ]
-
-  workflowChart.setOption({
-    animationDuration: 1200,
-    tooltip: {
-      backgroundColor: 'rgba(10, 21, 42, 0.92)',
-      borderWidth: 0,
-      padding: 12,
-      textStyle: {
-        color: '#eef4ff'
-      },
-      formatter: ({ data }) => `${data.name}<br/>${data.note || ''}`
-    },
-    series: [
-      {
-        type: 'graph',
-        layout: 'none',
-        roam: false,
-        edgeSymbol: ['none', 'arrow'],
-        edgeSymbolSize: [0, 8],
-        lineStyle: {
-          width: 2.5,
-          color: 'rgba(101, 214, 255, 0.55)',
-          curveness: 0.14
-        },
-        label: {
-          show: true,
-          position: 'inside',
-          fontSize: 12,
-          fontWeight: 600,
-          color: '#0b1020'
-        },
-        emphasis: {
-          focus: 'adjacency',
-          scale: true
-        },
-        data: nodes.map((item) => ({
-          ...item,
-          itemStyle: {
-            color: item.color,
-            borderColor: 'rgba(255, 255, 255, 0.5)',
-            borderWidth: 1.5,
-            shadowBlur: 18,
-            shadowColor: 'rgba(13, 27, 53, 0.18)'
-          }
-        })),
-        links
-      }
-    ]
-  })
-}
-
 const initResourceTrendChart = () => {
   if (!resourceTrendChartRef.value) {
     return
@@ -862,7 +604,6 @@ const refreshResourceData = async () => {
 }
 
 const handleResize = () => {
-  workflowChart?.resize()
   resourceTrendChart?.resize()
 }
 
@@ -877,7 +618,6 @@ const goTo = (path) => {
 }
 
 onMounted(() => {
-  initWorkflowChart()
   initResourceTrendChart()
   refreshResourceData()
   window.addEventListener('resize', handleResize)
@@ -894,7 +634,6 @@ onBeforeUnmount(() => {
     clearInterval(clockTimer)
   }
   window.removeEventListener('resize', handleResize)
-  workflowChart?.dispose()
   resourceTrendChart?.dispose()
 })
 </script>
@@ -1178,10 +917,6 @@ onBeforeUnmount(() => {
   }
 }
 
-.surface-card--workflow {
-  grid-column: 1 / -1;
-}
-
 .surface-card__head {
   display: flex;
   justify-content: space-between;
@@ -1320,132 +1055,6 @@ onBeforeUnmount(() => {
   color: #94a3b8;
 }
 
-.workflow-chart {
-  width: 100%;
-  min-height: 360px;
-  border-radius: 20px;
-  background:
-    radial-gradient(circle at left top, rgba(20, 184, 166, 0.08), transparent 24%),
-    linear-gradient(180deg, rgba(245, 250, 255, 0.98) 0%, rgba(239, 245, 251, 0.88) 100%);
-}
-
-.workflow-step-list {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.workflow-step {
-  position: relative;
-  min-height: 116px;
-  padding: 18px;
-  border-radius: 18px;
-  background: #f8fbfe;
-  border: 1px solid rgba(15, 23, 42, 0.04);
-  overflow: hidden;
-
-  &::before {
-    content: "";
-    position: absolute;
-    left: 18px;
-    top: 0;
-    width: 42px;
-    height: 4px;
-    border-radius: 999px;
-    background: var(--accent);
-  }
-}
-
-.workflow-step__index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 38px;
-  height: 24px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.05);
-  color: #475569;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-}
-
-.workflow-step__title {
-  display: block;
-  margin-top: 14px;
-  color: #0f172a;
-  font-size: 15px;
-}
-
-.workflow-step__desc {
-  display: block;
-  margin-top: 8px;
-  font-size: 12px;
-  line-height: 1.75;
-  color: #64748b;
-}
-
-.focus-list {
-  display: grid;
-  gap: 12px;
-}
-
-.focus-card {
-  padding: 18px;
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(247, 250, 253, 0.96) 0%, rgba(242, 246, 251, 0.9) 100%);
-  border: 1px solid rgba(15, 23, 42, 0.04);
-}
-
-.focus-card__eyebrow {
-  color: #0f766e;
-}
-
-.focus-card__title {
-  display: block;
-  color: #0f172a;
-  font-size: 18px;
-  line-height: 1.4;
-}
-
-.focus-card__desc {
-  margin: 10px 0 0;
-  font-size: 13px;
-  line-height: 1.8;
-  color: #64748b;
-}
-
-.alert-list {
-  display: grid;
-  gap: 10px;
-}
-
-.alert-chip {
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: #0f172a;
-  color: #e6eef8;
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-.focus-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.focus-action {
-  flex: 1;
-  min-height: 42px;
-  border-radius: 14px;
-  font-weight: 700;
-}
-
-.focus-action--ghost {
-  border-color: rgba(15, 118, 110, 0.16);
-  color: #0f766e;
-}
-
 .hero-panel,
 .hero-score,
 .surface-card,
@@ -1488,12 +1097,6 @@ onBeforeUnmount(() => {
   }
 }
 
-@media (max-width: 1380px) {
-  .workflow-step-list {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 1200px) {
   .hero-panel,
   .home-grid {
@@ -1527,10 +1130,6 @@ onBeforeUnmount(() => {
     }
   }
 
-  .focus-actions {
-    flex-direction: column;
-  }
-
   .surface-card__head,
   .hero-score {
     flex-direction: column;
@@ -1542,3 +1141,5 @@ onBeforeUnmount(() => {
   }
 }
 </style>
+
+
