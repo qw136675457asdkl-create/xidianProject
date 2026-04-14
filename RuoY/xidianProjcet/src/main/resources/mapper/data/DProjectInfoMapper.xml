@@ -18,6 +18,11 @@
         select project_id, project_name, project_content_desc, create_by, create_time, update_time, path from SYSTEM_COLLABORATION_TEST.d_project_info
     </sql>
 
+    <select id="selectSameNameProject" parameterType="String" resultMap="DProjectInfoResult">
+        <include refid="selectDProjectInfoVo"/>
+        where project_name = #{projectName}
+    </select>
+
     <select id="selectDProjectInfoList" parameterType="DProjectInfo" resultMap="DProjectInfoResult">
         <include refid="selectDProjectInfoVo"/>
         <where>

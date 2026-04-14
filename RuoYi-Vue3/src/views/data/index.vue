@@ -143,6 +143,28 @@
                                   导出
                                 </el-button>
                                 <el-button
+                                  class="toolbar-action-btn toolbar-action-btn--export"
+                                  type="primary"
+                                  @click="handleRenameData"
+                                  v-hasPermi="['dataInfo:info:Rename']"
+                                >
+                                  <template #icon>
+                                    <svg-icon icon-class="rename" />
+                                  </template>
+                                  规范重命名
+                                </el-button>
+                                <el-button class="toolbar-action-btn toolbar-action-btn--compare"
+                                  type="primary"
+                                  :disabled="ids.length < 2"
+                                  @click="handleCompareData"
+                                  v-hasPermi="['dataInfo:info:compare']"
+                                >
+                                  <template #icon>
+                                    <svg-icon icon-class="compare" />
+                                  </template>
+                                数据比对
+                                </el-button>
+                                <el-button
                                   class="toolbar-action-btn toolbar-action-btn--delete"
                                   type="danger"
                                   icon="Delete"
@@ -221,6 +243,95 @@
                     </section>
                 </div>
             </div>
+
+        <el-dialog
+            v-model="compareDialogVisible"
+            width="88%"
+            top="4vh"
+            class="compare-preview-dialog"
+            append-to-body
+            @closed="handleCompareDialogClosed"
+        >
+            <template #header>
+                <div class="compare-preview-dialog__header">
+                    <div>
+                        <div class="compare-preview-dialog__title">数据比对</div>
+                        <div class="compare-preview-dialog__subtitle">已选 {{ comparePreviewItems.length }} 条数据，展示区域会根据数量自动调整</div>
+                    </div>
+                </div>
+            </template>
+
+            <div class="compare-preview-dialog__body" :style="{ maxHeight: comparePreviewDialogBodyMaxHeight }">
+                <div v-if="comparePreviewItems.length > 0" class="compare-preview-list">
+                    <section v-for="item in comparePreviewItems" :key="item.id" class="compare-preview-item">
+                        <header class="compare-preview-item__header">
+                            <div class="compare-preview-item__title">{{ item.title }}</div>
+                            <div class="compare-preview-item__meta">{{ getComparePreviewMeta(item) }}</div>
+                        </header>
+
+                        <div v-loading="item.loading" class="compare-preview-item__body" :style="{ height: comparePreviewItemHeight }">
+                            <div v-if="item.previewType === 'table'">
+                                <el-table v-if="item.rows.length > 0" :data="item.rows" border stripe :height="comparePreviewItemHeight">
+                                    <el-table-column
+                                        v-for="header in getCompareTableColumns(item)"
+                                        :key="header"
+                                        :prop="header"
+                                        :label="header"
+                                        show-overflow-tooltip
+                                    />
+                                </el-table>
+                                <el-empty v-else :description="item.message || '暂无表格内容'" />
+                            </div>
+
+                            <div v-else-if="item.previewType === 'text'" class="compare-text-preview">
+                                <div v-if="item.rows.length > 0" class="compare-text-preview__body" :style="{ height: comparePreviewItemHeight }">
+                                    <div
+                                        v-for="(line, index) in getCompareTextLines(item)"
+                                        :key="`${item.id}-${index}`"
+                                        class="compare-text-preview__line"
+                                    >
+                                        <span class="compare-text-preview__line-number">{{ index + 1 }}</span>
+                                        <pre class="compare-text-preview__line-content">{{ line }}</pre>
+                                    </div>
+                                </div>
+                                <el-empty v-else :description="item.message || '暂无文本内容'" />
+                            </div>
+
+                            <div v-else-if="item.previewType === 'pdf'" class="compare-media-preview">
+                                <iframe v-if="item.objectUrl" :src="item.objectUrl" class="compare-media-preview__frame" title="PDF比对预览" />
+                                <el-empty v-else :description="item.message || '暂无 PDF 预览内容'" />
+                            </div>
+
+                            <div v-else-if="item.previewType === 'image'" class="compare-media-preview">
+                                <img v-if="item.objectUrl" :src="item.objectUrl" :alt="item.title" class="compare-media-preview__image" />
+                                <el-empty v-else :description="item.message || '暂无图片预览内容'" />
+                            </div>
+
+                            <div v-else-if="item.previewType === 'audio'" class="compare-media-preview compare-media-preview--audio">
+                                <audio v-if="item.objectUrl" :src="item.objectUrl" controls class="compare-media-preview__audio" />
+                                <el-empty v-else :description="item.message || '暂无音频预览内容'" />
+                            </div>
+
+                            <div v-else-if="item.previewType === 'video'" class="compare-media-preview">
+                                <video v-if="item.objectUrl" :src="item.objectUrl" controls class="compare-media-preview__video" />
+                                <el-empty v-else :description="item.message || '暂无视频预览内容'" />
+                            </div>
+
+                            <div v-else class="compare-preview-item__empty">
+                                <el-empty :description="item.message || '暂不支持在线比对该文件'" />
+                            </div>
+                        </div>
+                    </section>
+                </div>
+                <el-empty v-else description="请选择需要比对的数据" />
+            </div>
+
+            <template #footer>
+                <div class="dialog-footer">
+                    <el-button @click="compareDialogVisible = false">关 闭</el-button>
+                </div>
+            </template>
+        </el-dialog>
 
         <!-- 添加项目信息对话框 -->
         <el-dialog
@@ -391,7 +502,7 @@
                     <el-icon class="el-icon--upload"><upload-filled /></el-icon>
                     <div class="el-upload__text">拖拽试验文件到此处，或<em>点击选择文件</em></div>
                     <template #tip>
-                        <div class="experiment-upload__tip">支持 ZIP、CSV、Excel、TXT、JSON、Word、PDF、BIN、DAT、RAW；如需上传整个文件夹，请使用下方“选择文件夹”。</div>
+                        <div class="experiment-upload__tip">支持 ZIP、CSV、Excel、TXT、JSON、Word、PDF、BIN、DAT、RAW、PNG、JPG、JPEG 、MP3、MP4；如需上传整个文件夹，请使用下方“选择文件夹”。</div>
                     </template>
                 </el-upload>
                 <input
@@ -642,7 +753,7 @@
             </div>
         </el-drawer>
 
-        <!-- 添加或修改数据对话框 -->
+         <!-- 添加或修改数据对话框 -->
         <el-dialog :title="title" v-model="open" width="700px" append-to-body>
             <el-form ref="dataRef" :model="form" :rules="rules" label-width="100px">
                 <!-- 可编辑字段 -->
@@ -906,7 +1017,7 @@
                     <el-icon class="el-icon--upload"><upload-filled /></el-icon>
                     <div class="el-upload__text">拖拽导入文件到此处，或<em>点击选择文件</em></div>
                     <template #tip>
-                        <div class="experiment-upload__tip">支持 ZIP、CSV、Excel、TXT、JSON、Word、PDF、BIN、DAT、RAW；如需上传整个文件夹，请使用下方“选择文件夹”。</div>
+                        <div class="experiment-upload__tip">支持 ZIP、CSV、Excel、TXT、JSON、Word、PDF、BIN、DAT、RAW、PNG、JPG、JPEG、MP3、MP4；如需上传整个文件夹，请使用下方“选择文件夹”。</div>
                     </template>
                 </el-upload>
                 <input
@@ -1055,6 +1166,28 @@
                         <el-empty v-else :description="detailPreviewMessage || '暂无 PDF 预览内容'" />
                     </div>
                 </div>
+                <div v-else-if="isDetailImageFile" class="detail-media-preview">
+                    <div v-loading="detailPreviewLoading" class="detail-media-preview__container" :style="{ height: detailPreviewContentHeight }">
+                        <img v-if="detailMediaUrl" :src="detailMediaUrl" :alt="detailFile?.name || '图片预览'" class="detail-media-preview__image" />
+                        <el-empty v-else :description="detailPreviewMessage || '暂无图片预览内容'" />
+                    </div>
+                </div>
+                <div v-else-if="isDetailAudioFile" class="detail-media-preview">
+                    <div
+                        v-loading="detailPreviewLoading"
+                        class="detail-media-preview__container detail-media-preview__container--audio"
+                        :style="{ height: detailPreviewContentHeight }"
+                    >
+                        <audio v-if="detailMediaUrl" :src="detailMediaUrl" controls class="detail-media-preview__audio" />
+                        <el-empty v-else :description="detailPreviewMessage || '暂无音频预览内容'" />
+                    </div>
+                </div>
+                <div v-else-if="isDetailVideoFile" class="detail-media-preview">
+                    <div v-loading="detailPreviewLoading" class="detail-media-preview__container" :style="{ height: detailPreviewContentHeight }">
+                        <video v-if="detailMediaUrl" :src="detailMediaUrl" controls class="detail-media-preview__video" />
+                        <el-empty v-else :description="detailPreviewMessage || '暂无视频预览内容'" />
+                    </div>
+                </div>
                 <div v-else-if="isDetailBinaryFile" class="detail-preview__unsupported">
                     <el-empty :description="detailPreviewMessage || '暂不支持预览二进制文件，请下载后查看'" />
                 </div>
@@ -1184,6 +1317,28 @@
                                         <el-empty v-else :description="detailPreviewMessage || '暂无 PDF 预览内容'" />
                                     </div>
                                 </div>
+                                <div v-else-if="isDetailImageFile" class="detail-media-preview">
+                                    <div v-loading="detailPreviewLoading" class="detail-media-preview__container" :style="{ height: detailPreviewContentHeight }">
+                                        <img v-if="detailMediaUrl" :src="detailMediaUrl" :alt="detailFile?.name || '图片预览'" class="detail-media-preview__image" />
+                                        <el-empty v-else :description="detailPreviewMessage || '暂无图片预览内容'" />
+                                    </div>
+                                </div>
+                                <div v-else-if="isDetailAudioFile" class="detail-media-preview">
+                                    <div
+                                        v-loading="detailPreviewLoading"
+                                        class="detail-media-preview__container detail-media-preview__container--audio"
+                                        :style="{ height: detailPreviewContentHeight }"
+                                    >
+                                        <audio v-if="detailMediaUrl" :src="detailMediaUrl" controls class="detail-media-preview__audio" />
+                                        <el-empty v-else :description="detailPreviewMessage || '暂无音频预览内容'" />
+                                    </div>
+                                </div>
+                                <div v-else-if="isDetailVideoFile" class="detail-media-preview">
+                                    <div v-loading="detailPreviewLoading" class="detail-media-preview__container" :style="{ height: detailPreviewContentHeight }">
+                                        <video v-if="detailMediaUrl" :src="detailMediaUrl" controls class="detail-media-preview__video" />
+                                        <el-empty v-else :description="detailPreviewMessage || '暂无视频预览内容'" />
+                                    </div>
+                                </div>
                                 <div v-else-if="isDetailBinaryFile" class="detail-preview__unsupported">
                                     <el-empty :description="detailPreviewMessage || '暂不支持预览二进制文件，请下载后查看'" />
                                 </div>
@@ -1204,7 +1359,7 @@
     </div>
 </template>
 <script setup name="Business">
-import {getdataList,getdataDetail,getMovePathTree,updatedata,deldata,adddata,previewData,downloadData} from '@/api/data/bussiness'
+import {getdataList,getdataDetail,getMovePathTree,updatedata,deldata,adddata,previewData,downloadData,RenameDataName} from '@/api/data/bussiness'
 import { getExperimentTree, addProjectInfo, addExperimentInfo, getInfo, updateInfo, delInfo } from "@/api/data/info"
 import { addDateRange, blobValidate } from "@/utils/ruoyi"
 import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
@@ -1248,8 +1403,12 @@ const showSearch = ref(true)
 const total = ref(0)
 const businessList = ref([])
 const ids = ref([])
+const selectedBusinessRows = ref([])
 const single = ref(true)
 const multiple = ref(true)
+const compareDialogVisible = ref(false)
+const comparePreviewItems = ref([])
+const COMPARE_PREVIEW_PAGE_SIZE = 20
 
 // 文件管理器相关状态
 const fileLoading = ref(false)
@@ -1274,8 +1433,8 @@ const experimentUploadProgress = reactive({
 })
 const fileManagerPreviewFile = ref(null)
 const uploadDataFormRef = ref(null)
-const EXPERIMENT_UPLOAD_ACCEPT = '.zip,.csv,.xls,.xlsx,.txt,.json,.doc,.docx,.pdf,.bin,.dat,.raw'
-const experimentAllowedExtensions = new Set(['zip', 'csv', 'xls', 'xlsx', 'txt', 'json', 'doc', 'docx', 'pdf', 'bin', 'dat', 'raw'])
+const EXPERIMENT_UPLOAD_ACCEPT = '.zip,.csv,.xls,.xlsx,.txt,.json,.doc,.docx,.pdf,.bin,.dat,.raw,.png,.jpg,.jpeg,.mp3,.mp4'
+const experimentAllowedExtensions = new Set(['zip', 'csv', 'xls', 'xlsx', 'txt', 'json', 'doc', 'docx', 'pdf', 'bin', 'dat', 'raw','png','jpg','jpeg','mp3','mp4'])
 let experimentDraftUid = 0
 let businessDraftUid = 0
 
@@ -1294,6 +1453,7 @@ const detailPreviewTotal = ref(0)
 const detailTableRows = ref([])
 const detailPreviewMessage = ref('')
 const detailPdfUrl = ref('')
+const detailMediaUrl = ref('')
 const movePathTreeOptions = ref([])
 const movePathNodeMap = ref({})
 const selectedMovePathNodeId = ref(null)
@@ -1513,6 +1673,53 @@ function getProjects() {
   }).catch(err => {
     showInfoRequestError(err, '获取项目信息失败')
   })
+}
+function handleRenameData() {
+  if (ids.value.length === 0) {
+    ElMessage.warning('请选择要规范重命名的数据')
+    return Promise.resolve()
+  }
+
+  const selectedRows = businessList.value.filter(item => ids.value.includes(item.id))
+  const renameRows = selectedRows
+    .filter(item => item?.id && item?.experimentId && item?.dataName && item?.projectName && item?.experimentName)
+    .map(item => ({
+      id: item.id,
+      experimentId: item.experimentId,
+      dataName: item.dataName,
+      projectName: item.projectName,
+      experimentName: item.experimentName
+    }))
+
+  if (renameRows.length === 0) {
+    ElMessage.warning('选中的数据缺少规范重命名所需信息')
+    return Promise.resolve()
+  }
+
+  return RenameDataName(renameRows).then(res => {
+    if (res.code === 200) {
+      ElMessage.success('重命名成功')
+      getTreeData()
+      getList()
+    } else {
+      ElMessage.error(res.msg || '重命名失败')
+    }
+  }).catch(err => {
+    showInfoRequestError(err, '重命名失败')
+  })
+}
+
+async function handleCompareData() {
+  if (selectedBusinessRows.value.length < 2) {
+    ElMessage.warning('请至少选择两条数据进行比对')
+    return
+  }
+
+  handleCompareDialogClosed()
+  comparePreviewItems.value = selectedBusinessRows.value.map(row => createComparePreviewItem(row))
+  compareDialogVisible.value = true
+
+  await Promise.allSettled(comparePreviewItems.value.map(item => loadComparePreviewItem(item)))
 }
 
 function resetProjectInfoForm() {
@@ -2268,11 +2475,27 @@ const previewDataFilePath = computed(() => {
   return buildRelativeDataFilePath(extractDirPath(originalPath), fileName, suffix)
 })
 
+const comparePreviewDialogBodyMaxHeight = computed(() => {
+  const viewportHeight = detailViewport.height || window.innerHeight || 900
+  return `${Math.max(viewportHeight - 210, 360)}px`
+})
+
+const comparePreviewItemHeight = computed(() => {
+  const count = Math.max(comparePreviewItems.value.length, 1)
+  const viewportHeight = detailViewport.height || window.innerHeight || 900
+  const availableHeight = Math.max(viewportHeight - 280, 360)
+  const nextHeight = Math.floor(availableHeight / count)
+  return `${Math.max(Math.min(nextHeight, 420), 180)}px`
+})
+
 
 const detailTableColumns = computed(() => Object.keys(detailTableRows.value[0] || {}))
 const isDetailTabularFile = computed(() => isTabularFile(detailFile.value))
 const isDetailTextFile = computed(() => isTextFile(detailFile.value))
 const isDetailPdfFile = computed(() => isPdfFile(detailFile.value))
+const isDetailImageFile = computed(() => isImageFile(detailFile.value))
+const isDetailAudioFile = computed(() => isAudioFile(detailFile.value))
+const isDetailVideoFile = computed(() => isVideoFile(detailFile.value))
 const isDetailBinaryFile = computed(() => isBinaryFile(detailFile.value))
 const detailTextLines = computed(() =>
   detailTableRows.value.map(row => {
@@ -2448,15 +2671,136 @@ function isPdfFile(file) {
   return getPreviewFileExtension(file) === 'pdf'
 }
 
+function isImageFile(file) {
+  const extension = getPreviewFileExtension(file)
+  return extension === 'jpg' || extension === 'jpeg' || extension === 'png'
+}
+
+function isAudioFile(file) {
+  return getPreviewFileExtension(file) === 'mp3'
+}
+
+function isVideoFile(file) {
+  return getPreviewFileExtension(file) === 'mp4'
+}
+
 function isBinaryFile(file) {
   const extension = getPreviewFileExtension(file)
   return extension === 'bin' || extension === 'dat' || extension === 'raw'
+}
+
+function getPreviewMimeType(file) {
+  const extension = getPreviewFileExtension(file)
+  if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg'
+  if (extension === 'png') return 'image/png'
+  if (extension === 'mp3') return 'audio/mpeg'
+  if (extension === 'mp4') return 'video/mp4'
+  if (extension === 'pdf') return 'application/pdf'
+  return 'application/octet-stream'
+}
+
+function getPreviewFileLabel(file) {
+  return file?.dataName || file?.name || file?.dataFilePath?.split(/[\\/]/).pop() || '未命名文件'
+}
+
+function getDetailPreviewTitle(file) {
+  const fileName = getPreviewFileName(file)
+  const fileLabel = getPreviewFileLabel(file)
+
+  if (fileName.endsWith('.csv')) return `CSV文件预览: ${fileLabel}`
+  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) return `Excel文件预览: ${fileLabel}`
+  if (fileName.endsWith('.txt')) return `Txt文件预览: ${fileLabel}`
+  if (fileName.endsWith('.json')) return `JSON文件预览: ${fileLabel}`
+  if (fileName.endsWith('.doc') || fileName.endsWith('.docx')) return `Word文件预览: ${fileLabel}`
+  if (fileName.endsWith('.pdf')) return `PDF文件预览: ${fileLabel}`
+  if (isImageFile(file)) return `图片文件预览: ${fileLabel}`
+  if (isAudioFile(file)) return `音频文件预览: ${fileLabel}`
+  if (isVideoFile(file)) return `视频文件预览: ${fileLabel}`
+  return `文件预览: ${fileLabel}`
+}
+
+function resolveComparePreviewType(file) {
+  if (isTabularFile(file)) return 'table'
+  if (isTextFile(file)) return 'text'
+  if (isPdfFile(file)) return 'pdf'
+  if (isImageFile(file)) return 'image'
+  if (isAudioFile(file)) return 'audio'
+  if (isVideoFile(file)) return 'video'
+  return 'unsupported'
+}
+
+function getComparePreviewTypeLabel(previewType) {
+  if (previewType === 'table') return '表格'
+  if (previewType === 'text') return '文本'
+  if (previewType === 'pdf') return 'PDF'
+  if (previewType === 'image') return '图片'
+  if (previewType === 'audio') return '音频'
+  if (previewType === 'video') return '视频'
+  return '未支持'
+}
+
+function getCompareTableColumns(item) {
+  return Object.keys(item?.rows?.[0] || {})
+}
+
+function getCompareTextLines(item) {
+  return (item?.rows || []).map(row => {
+    if (row == null) return ''
+    if (typeof row === 'string') return row
+    if (typeof row === 'object') return Object.values(row).join(' ')
+    return String(row)
+  })
+}
+
+function getComparePreviewMeta(item) {
+  const previewLabel = getComparePreviewTypeLabel(item.previewType)
+  let fileTypeLabel = '暂无内容'
+
+  if (item.previewType === 'table' || item.previewType === 'text') {
+    fileTypeLabel = item.total > 0 ? `展示 ${item.rows.length}/${item.total}` : '暂无内容'
+  } else if (item.objectUrl) {
+    fileTypeLabel = '已加载预览'
+  } else if (item.loading) {
+    fileTypeLabel = '加载中'
+  }
+
+  return `${previewLabel} · ${fileTypeLabel}`
+}
+
+function createComparePreviewItem(row) {
+  return {
+    id: row.id,
+    title: row.dataName || row.name || '未命名数据',
+    row,
+    loading: true,
+    previewType: resolveComparePreviewType(row),
+    rows: [],
+    total: 0,
+    message: '',
+    objectUrl: ''
+  }
+}
+
+function revokeComparePreviewItemUrl(item) {
+  if (!item?.objectUrl) return
+  URL.revokeObjectURL(item.objectUrl)
+  item.objectUrl = ''
+}
+
+function revokeComparePreviewUrls() {
+  comparePreviewItems.value.forEach(item => revokeComparePreviewItemUrl(item))
 }
 
 function revokeDetailPdfUrl() {
   if (!detailPdfUrl.value) return
   URL.revokeObjectURL(detailPdfUrl.value)
   detailPdfUrl.value = ''
+}
+
+function revokeDetailMediaUrl() {
+  if (!detailMediaUrl.value) return
+  URL.revokeObjectURL(detailMediaUrl.value)
+  detailMediaUrl.value = ''
 }
 
 function resetDetailTablePreview() {
@@ -2471,6 +2815,7 @@ function resetDetailPreviewState() {
   detailPreviewMessage.value = ''
   resetDetailTablePreview()
   revokeDetailPdfUrl()
+  revokeDetailMediaUrl()
 }
 
 function resetDetailDialogWindowState() {
@@ -2584,6 +2929,126 @@ async function loadDetailPdfPreview() {
   } finally {
     detailPreviewLoading.value = false
   }
+}
+
+async function loadDetailMediaPreview() {
+  if (!detailFile.value || !detailFile.value.dataFilePath || !detailFile.value.experimentId) return
+  detailPreviewLoading.value = true
+  detailPreviewMessage.value = ''
+  revokeDetailMediaUrl()
+
+  try {
+    const data = await downloadData({
+      id: detailFile.value.id,
+      experimentId: detailFile.value.experimentId,
+      dataFilePath: detailFile.value.dataFilePath
+    })
+
+    if (blobValidate(data)) {
+      const mimeType = getPreviewMimeType(detailFile.value)
+      const mediaBlob = data.type === mimeType ? data : new Blob([data], { type: mimeType })
+      detailMediaUrl.value = URL.createObjectURL(mediaBlob)
+      return
+    }
+
+    const responseText = await data.text()
+    const responseObj = JSON.parse(responseText)
+    detailPreviewMessage.value = responseObj.msg || '媒体预览加载失败，请下载后查看'
+  } catch (error) {
+    detailPreviewMessage.value = error?.message || '媒体预览加载失败，请下载后查看'
+  } finally {
+    detailPreviewLoading.value = false
+  }
+}
+
+async function loadCompareMediaPreview(item) {
+  const currentRow = item.row
+  const previewType = resolveComparePreviewType(currentRow)
+
+  try {
+    const data = await downloadData({
+      id: currentRow.id,
+      experimentId: currentRow.experimentId,
+      dataFilePath: currentRow.dataFilePath
+    })
+
+    if (blobValidate(data)) {
+      const mimeType = getPreviewMimeType(currentRow)
+      const mediaBlob = data.type === mimeType ? data : new Blob([data], { type: mimeType })
+      item.objectUrl = URL.createObjectURL(mediaBlob)
+      item.previewType = previewType
+      item.message = ''
+      item.total = 1
+      return
+    }
+
+    const responseText = await data.text()
+    const responseObj = JSON.parse(responseText)
+    item.previewType = previewType
+    item.message = responseObj.msg || '预览加载失败，请下载后查看'
+  } catch (error) {
+    item.previewType = previewType
+    item.message = error?.message || '预览加载失败，请下载后查看'
+  }
+}
+
+async function loadComparePreviewItem(item) {
+  const currentRow = item.row
+  item.loading = true
+  item.message = ''
+  item.rows = []
+  item.total = 0
+  revokeComparePreviewItemUrl(item)
+
+  if (!currentRow?.experimentId || !currentRow?.dataFilePath) {
+    item.previewType = 'unsupported'
+    item.message = '缺少比对预览所需的文件参数'
+    item.loading = false
+    return
+  }
+
+  try {
+    if (isTabularFile(currentRow) || isTextFile(currentRow)) {
+      const response = await previewData({
+        experimentId: currentRow.experimentId,
+        dataFilePath: currentRow.dataFilePath,
+        pageNum: 1,
+        pageSize: COMPARE_PREVIEW_PAGE_SIZE
+      })
+
+      if (response.code === 200) {
+        const pageData = response.data || {}
+        item.previewType = pageData.previewType || resolveComparePreviewType(currentRow)
+        item.rows = Array.isArray(pageData.rows) ? pageData.rows : []
+        item.total = Number(pageData.total) || 0
+        item.message = pageData.message || ''
+      } else {
+        item.previewType = resolveComparePreviewType(currentRow)
+        item.message = response.msg || '预览失败，请下载后查看'
+      }
+      return
+    }
+
+    if (isPdfFile(currentRow) || isImageFile(currentRow) || isAudioFile(currentRow) || isVideoFile(currentRow)) {
+      await loadCompareMediaPreview(item)
+      return
+    }
+
+    item.previewType = 'unsupported'
+    item.message = isBinaryFile(currentRow)
+      ? '暂不支持比对二进制文件，请下载后查看'
+      : '暂不支持在线比对该文件'
+  } catch (error) {
+    item.previewType = resolveComparePreviewType(currentRow)
+    item.message = error?.message || '预览失败，请下载后查看'
+  } finally {
+    item.loading = false
+  }
+}
+
+function handleCompareDialogClosed() {
+  revokeComparePreviewUrls()
+  comparePreviewItems.value = []
 }
 
 
@@ -2811,6 +3276,7 @@ function reset() {
 
 /** 多选框选中数据 */
 function handleSelectionChange(selection) {
+  selectedBusinessRows.value = selection
   ids.value = selection.map(item => item.id)
   single.value = selection.length != 1
   multiple.value = !selection.length
@@ -2893,44 +3359,33 @@ function handleView(row) {
       experimentId: row.experimentId
     }
 
-    const fileName = getPreviewFileName(row)
-    const fileLabel = row.dataName || row.name || '未命名文件'
     resetDetailPreviewState()
+    detailTitle.value = getDetailPreviewTitle(row)
 
     if (isTabularFile(row) || isTextFile(row)) {
-      if (fileName.endsWith('.csv')) {
-        detailTitle.value = `CSV文件预览: ${row.dataName}`
-      } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-        detailTitle.value = `Excel文件预览: ${row.dataName}`
-      } else if (fileName.endsWith('.txt')) {
-        detailTitle.value = `Txt文件预览: ${row.dataName}`
-      } else if (fileName.endsWith('.json')) {
-        detailTitle.value = `JSON文件预览: ${row.dataName}`
-      } else if (fileName.endsWith('.doc') || fileName.endsWith('.docx')) {
-        detailTitle.value = `Word文件预览: ${row.dataName}`
-      } else {
-        detailTitle.value = `文件预览: ${row.dataName}`
-      }
       detailVisible.value = true
       loadDetailTablePreview()
       return
     }
 
     if (isPdfFile(row)) {
-      detailTitle.value = `PDF文件预览: ${fileLabel}`
       detailVisible.value = true
       loadDetailPdfPreview()
       return
     }
 
+    if (isImageFile(row) || isAudioFile(row) || isVideoFile(row)) {
+      detailVisible.value = true
+      loadDetailMediaPreview()
+      return
+    }
+
     if (isBinaryFile(row)) {
-      detailTitle.value = `文件预览: ${fileLabel}`
       detailPreviewMessage.value = '暂不支持预览二进制文件，请下载后查看'
       detailVisible.value = true
       return
     }
 
-    detailTitle.value = `文件预览: ${fileLabel}`
     detailPreviewMessage.value = '暂不支持在线预览该文件'
     detailVisible.value = true
   } else {
@@ -2962,6 +3417,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
     stopDetailDialogDrag()
     revokeDetailPdfUrl()
+    revokeDetailMediaUrl()
+    revokeComparePreviewUrls()
     window.removeEventListener('resize', updateDetailDialogViewport)
 })
 
@@ -3951,6 +4408,187 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   border: none;
+}
+
+.detail-media-preview__container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  overflow: auto;
+  background: #fafafa;
+}
+
+.detail-media-preview__container--audio {
+  padding: 24px;
+}
+
+.detail-media-preview__image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.detail-media-preview__audio {
+  width: min(100%, 720px);
+}
+
+.detail-media-preview__video {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 6px;
+  background: #000;
+}
+
+.compare-preview-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.compare-preview-dialog__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.compare-preview-dialog__subtitle {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.compare-preview-dialog__body {
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.compare-preview-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.compare-preview-item {
+  padding: 0 0 18px;
+}
+
+.compare-preview-item + .compare-preview-item {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.compare-preview-item__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.compare-preview-item__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  word-break: break-word;
+}
+
+.compare-preview-item__meta {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.compare-preview-item__body {
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.compare-preview-item__empty,
+.compare-media-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 16px;
+  background: #fafafa;
+}
+
+.compare-media-preview--audio {
+  padding: 24px;
+}
+
+.compare-media-preview__frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.compare-media-preview__image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.compare-media-preview__audio {
+  width: min(100%, 720px);
+}
+
+.compare-media-preview__video {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  background: #000;
+}
+
+.compare-text-preview,
+.compare-text-preview__body {
+  height: 100%;
+}
+
+.compare-text-preview__body {
+  overflow-y: auto;
+  background: #fafafa;
+}
+
+.compare-text-preview__line {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.compare-text-preview__line:last-child {
+  border-bottom: none;
+}
+
+.compare-text-preview__line-number {
+  color: #9ca3af;
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: right;
+  user-select: none;
+}
+
+.compare-text-preview__line-content {
+  margin: 0;
+  color: #111827;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: Consolas, 'Courier New', monospace;
 }
 
 .detail-preview__unsupported {

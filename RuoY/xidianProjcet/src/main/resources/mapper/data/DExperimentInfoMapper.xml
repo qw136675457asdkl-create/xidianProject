@@ -44,6 +44,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         </where>
         order by e.create_time desc
     </select>
+
+    <select id="selectSamePathExperiment" resultMap="DExperimentInfoResult">
+        <include refid="selectDExperimentInfoVo"/>
+        where e.experiment_name = #{experimentName} AND e.projectId = #{projectId}
+    </select>
     
     <select id="selectDExperimentInfoByExperimentId" parameterType="String" resultMap="DExperimentInfoResult">
         <include refid="selectDExperimentInfoVo"/>

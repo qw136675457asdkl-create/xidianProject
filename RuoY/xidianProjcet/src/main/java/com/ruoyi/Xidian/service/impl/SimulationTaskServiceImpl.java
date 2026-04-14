@@ -12,8 +12,8 @@ import com.ruoyi.Xidian.mapper.DdataMapper;
 import com.ruoyi.Xidian.mapper.TaskDataGroupMapper;
 import com.ruoyi.Xidian.mapper.TaskMapper;
 import com.ruoyi.Xidian.service.SimulationTaskService;
+import com.ruoyi.Xidian.utils.NickNameUtil;
 import com.ruoyi.common.exception.ServiceException;
-import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
@@ -111,7 +111,7 @@ public class SimulationTaskServiceImpl implements SimulationTaskService {
         task.setStartCoordinate(request.getStartCoordinate());
         task.setEndCoordinate(request.getEndCoordinate());
         task.setStatus(TaskStatusEnum.DRAFT.name());
-        task.setCreateBy(SecurityUtils.getUsername());
+        task.setCreateBy(NickNameUtil.getNickName());
         task.setCreateTime(now);
         task.setUpdateTime(now);
         task.setPath(dExperimentInfoService.getExperimentRelativePath(task.getExperimentId()));

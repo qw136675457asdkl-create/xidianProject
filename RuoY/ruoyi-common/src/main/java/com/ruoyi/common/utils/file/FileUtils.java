@@ -435,6 +435,26 @@ public class FileUtils
             return previewWordByPage(file, lowerName, safePageNum, safePageSize, startIndex, endIndex);
         }
 
+        if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg"))
+        {
+            return buildMediaPreviewResult("image", "image/jpeg", file);
+        }
+
+        if (lowerName.endsWith(".png"))
+        {
+            return buildMediaPreviewResult("image", "image/png", file);
+        }
+
+        if (lowerName.endsWith(".mp3"))
+        {
+            return buildMediaPreviewResult("audio", "audio/mpeg", file);
+        }
+
+        if (lowerName.endsWith(".mp4"))
+        {
+            return buildMediaPreviewResult("video", "video/mp4", file);
+        }
+
         if (lowerName.endsWith(".pdf"))
         {
             return buildUnsupportedPreviewResult("PDF 文件请使用在线 PDF 预览");
@@ -636,6 +656,21 @@ public class FileUtils
         result.put("total", 0);
         result.put("pageNum", 1);
         result.put("pageSize", 0);
+        return result;
+    }
+
+    private static Map<String, Object> buildMediaPreviewResult(String previewType, String mimeType, File file)
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("previewType", previewType);
+        result.put("mimeType", mimeType);
+        result.put("message", "");
+        result.put("rows", new ArrayList<>());
+        result.put("total", 1);
+        result.put("pageNum", 1);
+        result.put("pageSize", 1);
+        result.put("fileName", file.getName());
+        result.put("fileSize", file.length());
         return result;
     }
 

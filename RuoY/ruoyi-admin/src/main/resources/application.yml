@@ -11,6 +11,8 @@ ruoyi:
 
   # 备份目录
   backupDir: /home/hyy1208/backupdata
+  #备份还原目录
+  backAndRestore: /home/hyy1208/BackupRestore
   #项目所在路径
   projectPath: /home/hyy1208/xidianProject/xd_project/xidianProject/DateCreate
   # 获取ip地址开关

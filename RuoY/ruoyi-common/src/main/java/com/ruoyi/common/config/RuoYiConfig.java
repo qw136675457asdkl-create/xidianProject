@@ -1,5 +1,6 @@
 package com.ruoyi.common.config;
 
+import org.apache.poi.hssf.record.BackupRecord;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +27,9 @@ public class RuoYiConfig
 
     /** 备份目录 */
     private static String backupDir;
+
+    /**备份还原目录 */
+    private static String backAndRestore;
 
     private static double thresholdMb;
 
@@ -142,5 +146,9 @@ public class RuoYiConfig
     public void setThresholdMb(double thresholdMb)
     {
         RuoYiConfig.thresholdMb = thresholdMb;
+    }
+
+    public static String getBackAndRestore(){
+        return backAndRestore;
     }
 }

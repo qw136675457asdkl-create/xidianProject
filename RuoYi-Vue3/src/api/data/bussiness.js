@@ -23,6 +23,15 @@ export function getdataDetail(id) {
   })
 }
 
+export function RenameDataName(data) {
+  const payload = Array.isArray(data) ? data : (data ? [data] : [])
+  return request({
+    url: '/data/bussiness/rename',
+    method: 'put',
+    data: payload
+  })
+}
+
 export function getMovePathTree() {
   return request({
     url: '/data/bussiness/movePathTree',

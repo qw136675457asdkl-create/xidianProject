@@ -65,4 +65,6 @@ public interface DProjectInfoMapper
     public List<DProjectInfo> selectAllDProjectInfo();
 
     List<DProjectInfo> selectDProjectInfoByProjectIds(List<Long> projectIds);
+
+    public DProjectInfo selectSameNameProject(String projectName);
 }

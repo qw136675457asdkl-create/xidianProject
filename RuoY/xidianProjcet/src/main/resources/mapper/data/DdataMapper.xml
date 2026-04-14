@@ -78,6 +78,13 @@
         is_simulation = #{isSimulation}
         WHERE id = #{id}
     </update>
+    <update id="updateDdataInfos" parameterType="java.util.List">
+        <foreach collection="list" item="item" separator=";">
+            update SYSTEM_COLLABORATION_TEST.md_data_relation
+            set data_name = #{item.dataName}
+            where id = #{item.id}
+        </foreach>
+    </update>
     <delete id="deleteDdataInfos">
         DELETE FROM SYSTEM_COLLABORATION_TEST.md_data_relation WHERE id IN
         <foreach collection="list" item="id" open="(" close=")" separator=",">

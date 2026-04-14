@@ -71,7 +71,7 @@ public class DProjectInfoServiceImpl implements IDProjectInfoService
             Path path = buildProjectRootPath("/" + pathStr);
             try (PathLockManager.LockHandle ignored = pathLockManager.lockWrite(path))
             {
-                if (Files.exists(path))
+                if (dProjectInfoMapper.selectSameNameProject(dProjectInfo.getProjectName())!=null||Files.exists(path))
                 {
                     throw new ServiceException("项目名称重复");
                 }

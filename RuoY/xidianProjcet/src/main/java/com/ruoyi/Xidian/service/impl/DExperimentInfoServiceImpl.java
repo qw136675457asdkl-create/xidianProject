@@ -163,7 +163,8 @@ public class DExperimentInfoServiceImpl implements IDExperimentInfoService
                     buildPaths(projectRoot),
                     buildPaths(experimentPath)))
             {
-                if (Files.exists(experimentPath))
+                if (dExperimentInfoMapper.selectSamePathExperiment(dExperimentInfo.getExperimentName(),dExperimentInfo.getProjectId())!=null
+                        ||Files.exists(experimentPath))
                 {
                     throw new ServiceException("同一项目下不允许有相同的试验名称");
                 }

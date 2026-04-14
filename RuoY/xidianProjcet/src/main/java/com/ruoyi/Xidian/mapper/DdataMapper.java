@@ -22,4 +22,6 @@ public interface DdataMapper {
     Integer deleteDdataInfos(List<Integer> ids);
     // 查询同一文件下相同文件名的文件
     DdataInfo selectSameNameFile(@Param("experimentId") String experimentId, @Param("dataFilePath") String dataFilePath);
+
+    int updateDdataInfos(@Param("list")List<DdataInfo> ddataInfos);
 }

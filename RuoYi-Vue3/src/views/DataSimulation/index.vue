@@ -191,7 +191,7 @@
                     :precision="6"
                     :min="-180"
                     :max="180"
-                    placeholder="Lon"
+                    placeholder="经度"
                   />
                   <el-input-number
                     v-model="simulationForm.startCoordinate.lat"
@@ -199,7 +199,7 @@
                     :precision="6"
                     :min="-90"
                     :max="90"
-                    placeholder="Lat"
+                    placeholder="纬度"
                   />
                   <el-input-number
                     v-model="simulationForm.startCoordinate.alt"
@@ -207,7 +207,7 @@
                     :precision="2"
                     :min="-1000"
                     :max="50000"
-                    placeholder="Alt"
+                    placeholder="高度"
                   />
                 </div>
               </div>
@@ -220,7 +220,7 @@
                     :precision="6"
                     :min="-180"
                     :max="180"
-                    placeholder="Lon"
+                    placeholder="经度"
                   />
                   <el-input-number
                     v-model="simulationForm.endCoordinate.lat"
@@ -228,7 +228,7 @@
                     :precision="6"
                     :min="-90"
                     :max="90"
-                    placeholder="Lat"
+                    placeholder="纬度"
                   />
                   <el-input-number
                     v-model="simulationForm.endCoordinate.alt"
@@ -236,7 +236,7 @@
                     :precision="2"
                     :min="-1000"
                     :max="50000"
-                    placeholder="Alt"
+                    placeholder="高度"
                   />
                 </div>
               </div>
@@ -351,7 +351,12 @@
               </el-form>
 
               <div class="metric-table-card">
-                <div class="metric-table-card__title">字段说明</div>
+                <div class="metric-table-card__header">
+                  <div class="metric-table-card__title">字段说明</div>
+                  <el-button type="primary" link @click="handleAddSimulationMetric">
+                    新增字段
+                  </el-button>
+                </div>
                 <el-table
                   :data="currentSimulationMetrics"
                   border
@@ -360,12 +365,33 @@
                 >
                   <el-table-column label="字段名称" min-width="180">
                     <template #default="{ row }">
-                      <span class="metric-cell">{{ row.fieldName }}</span>
+                      <el-input
+                        v-if="row.isCustom"
+                        v-model="row.fieldName"
+                        class="metric-edit-input"
+                        placeholder="请输入字段名称"
+                      />
+                      <span v-else class="metric-cell">{{ row.fieldName }}</span>
                     </template>
                   </el-table-column>
                   <el-table-column label="数据类型" width="140" align="center">
                     <template #default="{ row }">
-                      <span class="metric-cell metric-cell--center">{{ row.dataType }}</span>
+                      <el-select
+                        v-model="row.dataType"
+                        class="metric-edit-input"
+                        filterable
+                        allow-create
+                        default-first-option
+                        clearable
+                        placeholder="请选择或输入"
+                      >
+                        <el-option
+                          v-for="option in metricDataTypeOptions"
+                          :key="option"
+                          :label="option"
+                          :value="option"
+                        />
+                      </el-select>
                     </template>
                   </el-table-column>
                   <el-table-column label="推荐值" width="140" align="center">
@@ -394,7 +420,28 @@
                   </el-table-column>
                   <el-table-column label="描述与战术意义（Description & Tactic）" min-width="360">
                     <template #default="{ row }">
-                      <span class="metric-cell metric-cell--wrap">{{ row.description }}</span>
+                      <el-input
+                        v-model="row.description"
+                        type="textarea"
+                        :rows="2"
+                        resize="none"
+                        class="metric-edit-input"
+                        placeholder="请输入字段描述"
+                      />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="88" align="center">
+                    <template #default="{ row, $index }">
+                      <el-button
+                        v-if="row.isCustom"
+                        link
+                        type="danger"
+                        class="metric-delete-btn"
+                        @click="handleRemoveSimulationMetric($index)"
+                      >
+                        删除
+                      </el-button>
+                      <span v-else class="metric-cell metric-cell--center">--</span>
                     </template>
                   </el-table-column>
                 </el-table>
@@ -504,17 +551,18 @@ const COORDINATE_RULES = [
 
 const motionModelOptions = ['直线模型', '盘旋模型', '折线模型', '机动模型']
 const simulationTabs = [
-  { code: 'INS', label: '载机惯导数据', showDataSource: false, showTargetNum: false },
-  { code: 'ATTITUDE', label: '姿态', showDataSource: false, showTargetNum: false },
-  { code: 'RADAR_TRACK', label: '雷达航迹', showDataSource: true, showTargetNum: true },
-  { code: 'ADS_B', label: 'ADS_B', showDataSource: true, showTargetNum: true },
-  { code: 'EW', label: '电子战', showDataSource: true, showTargetNum: true },
-  { code: 'AIS', label: 'AIS', showDataSource: true, showTargetNum: true },
-  { code: 'ADSB', label: 'ADS-B', showDataSource: true, showTargetNum: true },
-  { code: 'COMM', label: '通信数据', showDataSource: true, showTargetNum: true },
-  { code: 'DATA9', label: '数据 9', showDataSource: true, showTargetNum: true },
-  { code: 'DATA10', label: '数据 10', showDataSource: true, showTargetNum: true }
+  { code: 'INS', label: '载机惯导信息', showDataSource: false, showTargetNum: false },
+  { code: 'ATTITUDE', label: '载机姿态信息', showDataSource: false, showTargetNum: false },
+  { code: 'RADAR_TRACK', label: '雷达航迹数据', showDataSource: true, showTargetNum: true },
+  { code: 'EW', label: '电子战数据', showDataSource: true, showTargetNum: true },
+  { code: 'COMM', label: '通侦数据', showDataSource: true, showTargetNum: true },
+  { code: 'ADSB', label: 'ADS-B 数据', showDataSource: true, showTargetNum: true },
+  { code: 'AIS', label: 'AIS数据', showDataSource: true, showTargetNum: true },
+  { code: 'ADS_B', label: '目标牵引询问数据', showDataSource: true, showTargetNum: true },
+  { code: 'DATA9', label: '方位数据', showDataSource: true, showTargetNum: true },
+  { code: 'DATA10', label: '闭锁信息', showDataSource: true, showTargetNum: true }
 ]
+const metricDataTypeOptions = ['String', 'Integer', 'Int', 'Long', 'Float', 'Double', 'BigInt', 'uint32', 'Boolean', 'Enum', 'Hex']
 
 const SIMULATION_GROUP_NAME_SUBMIT_MAP = {
   INS: 'aircraft_inertial',
@@ -722,6 +770,47 @@ function isMetricValueEditable(value) {
   return String(value ?? '').trim() !== '/'
 }
 
+function createEmptyMetric(index = 0) {
+  return {
+    fieldName: '',
+    dataType: '',
+    recommendedValue: '',
+    fluctuationRange: '',
+    description: '',
+    sortNo: index + 1,
+    isCustom: true
+  }
+}
+
+function resequenceMetrics(metrics = []) {
+  if (!Array.isArray(metrics)) {
+    return
+  }
+
+  metrics.forEach((metric, index) => {
+    metric.sortNo = index + 1
+  })
+}
+
+function handleAddSimulationMetric() {
+  const metrics = currentSimulationTabState.value?.metrics
+  if (!Array.isArray(metrics)) {
+    return
+  }
+
+  metrics.push(createEmptyMetric(metrics.length))
+}
+
+function handleRemoveSimulationMetric(index) {
+  const metrics = currentSimulationTabState.value?.metrics
+  if (!Array.isArray(metrics) || index < 0 || index >= metrics.length) {
+    return
+  }
+
+  metrics.splice(index, 1)
+  resequenceMetrics(metrics)
+}
+
 function buildLocalMetric(metric = {}, index = 0) {
   return {
     fieldName: metric.fieldName || '',
@@ -729,7 +818,8 @@ function buildLocalMetric(metric = {}, index = 0) {
     recommendedValue: resolveMetricDisplayValue(metric.recommendedValue, metric.recommendedFactory),
     fluctuationRange: resolveMetricDisplayValue(metric.fluctuationRange, metric.fluctuationFactory),
     description: metric.description || '',
-    sortNo: metric.sortNo || index + 1
+    sortNo: metric.sortNo || index + 1,
+    isCustom: Boolean(metric.isCustom)
   }
 }
 
@@ -740,7 +830,8 @@ function cloneMetric(metric = {}, index = 0) {
     recommendedValue: metric.recommendedValue ?? '',
     fluctuationRange: metric.fluctuationRange ?? '',
     description: metric.description || '',
-    sortNo: metric.sortNo || index + 1
+    sortNo: metric.sortNo || index + 1,
+    isCustom: Boolean(metric.isCustom)
   }
 }
 
@@ -776,7 +867,8 @@ buildLocalMetric = function(metric = {}, index = 0) {
       resolveMetricDisplayValue(metric.fluctuationRange, metric.fluctuationFactory)
     ),
     description: metric.description || '',
-    sortNo: metric.sortNo || index + 1
+    sortNo: metric.sortNo || index + 1,
+    isCustom: Boolean(metric.isCustom)
   }
 }
 
@@ -787,7 +879,8 @@ cloneMetric = function(metric = {}, index = 0) {
     recommendedValue: metric.recommendedValue ?? '',
     fluctuationRange: normalizeFluctuationRangeValue(metric.fluctuationRange ?? ''),
     description: metric.description || '',
-    sortNo: metric.sortNo || index + 1
+    sortNo: metric.sortNo || index + 1,
+    isCustom: Boolean(metric.isCustom)
   }
 }
 
@@ -1196,13 +1289,15 @@ function buildMetricPayload(groupCode) {
     return []
   }
 
-  return metrics.map(metric => ({
+  resequenceMetrics(metrics)
+
+  return metrics.map((metric, index) => ({
     fieldName: metric.fieldName,
     dataType: metric.dataType,
     recommendedValue: metric.recommendedValue,
     fluctuationRange: formatFluctuationRangeForSubmit(metric.fluctuationRange),
     description: metric.description,
-    sortNo: metric.sortNo
+    sortNo: metric.sortNo || index + 1
   }))
 }
 
@@ -1318,6 +1413,25 @@ async function legacyHandleGenerateSimulation() {
   }
 }
 
+function getMetricValidationMessage(tab) {
+  const metrics = simulationForm.tabs[tab.code]?.metrics
+  if (!Array.isArray(metrics)) {
+    return ''
+  }
+
+  for (let index = 0; index < metrics.length; index += 1) {
+    const metric = metrics[index]
+    if (!String(metric?.fieldName || '').trim()) {
+      return `请完善 ${tab.label} 第 ${index + 1} 行的字段名称`
+    }
+    if (!String(metric?.dataType || '').trim()) {
+      return `请完善 ${tab.label} 第 ${index + 1} 行的数据类型`
+    }
+  }
+
+  return ''
+}
+
 function validateSimulationForm(enabledTabs = getEnabledSimulationTabs()) {
   if (!simulationForm.taskName) {
     ElMessage.warning('\u8bf7\u8f93\u5165\u4efb\u52a1\u540d\u79f0')
@@ -1373,6 +1487,13 @@ function validateSimulationForm(enabledTabs = getEnabledSimulationTabs()) {
     }
     if (tab.showDataSource && state.dataSourceType === 'existing' && !state.sourceFileName) {
       ElMessage.warning(`\u8bf7\u9009\u62e9 ${tab.label} \u7684\u6570\u636e\u6e90\u6587\u4ef6`)
+      activeSimulationTab.value = tab.code
+      return false
+    }
+
+    const metricValidationMessage = getMetricValidationMessage(tab)
+    if (metricValidationMessage) {
+      ElMessage.warning(metricValidationMessage)
       activeSimulationTab.value = tab.code
       return false
     }
@@ -1743,8 +1864,15 @@ onBeforeUnmount(() => {
   margin-top: 8px;
 }
 
-.metric-table-card__title {
+.metric-table-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
+}
+
+.metric-table-card__title {
   font-size: 16px;
   font-weight: 700;
   color: #303133;
@@ -1795,6 +1923,15 @@ onBeforeUnmount(() => {
 
 .metric-edit-input :deep(.el-input__wrapper) {
   box-shadow: 0 0 0 1px #dcdfe6 inset;
+}
+
+.metric-edit-input :deep(.el-textarea__inner) {
+  min-height: 54px;
+  box-shadow: 0 0 0 1px #dcdfe6 inset;
+}
+
+.metric-delete-btn {
+  padding: 0;
 }
 
 .data-source-row {

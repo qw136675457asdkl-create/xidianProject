@@ -9,15 +9,12 @@ import com.ruoyi.Xidian.mapper.DTargetInfoMapper;
 import com.ruoyi.Xidian.mapper.DdataMapper;
 import com.ruoyi.Xidian.service.IDdataService;
 import com.ruoyi.Xidian.support.PathLockManager;
+import com.ruoyi.Xidian.utils.NickNameUtil;
 import com.ruoyi.common.config.RuoYiConfig;
 import com.ruoyi.common.constant.CacheConstants;
 import com.ruoyi.common.core.redis.RedisCache;
 import com.ruoyi.common.exception.ServiceException;
-import com.ruoyi.common.exception.file.InvalidExtensionException;
-import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
-import com.ruoyi.common.utils.file.FileUploadUtils;
-import com.ruoyi.common.utils.file.MimeTypeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,7 +46,7 @@ public class DdataServiceImpl implements IDdataService
 {
     private static final Logger log = LoggerFactory.getLogger(DdataServiceImpl.class);
     private static final Set<String> EXPERIMENT_ALLOWED_EXTENSIONS = new HashSet<>(
-            Arrays.asList("zip", "csv", "xls", "xlsx", "txt", "json", "doc", "docx", "pdf", "bin", "dat", "raw")
+            Arrays.asList("zip", "csv", "xls", "xlsx", "txt", "json", "doc", "docx", "pdf", "bin", "dat", "raw", "png" , "jpg" ,"jpeg","mp3","mp4")
     );
 
     @Autowired
@@ -183,8 +180,7 @@ public class DdataServiceImpl implements IDdataService
         ddataInfo.setDeviceId(null);
         ddataInfo.setDeviceInfo(null);
         ddataInfo.setWorkStatus("completed");
-        ddataInfo.setCreateBy(SecurityUtils.getUsername());
-
+        ddataInfo.setCreateBy(NickNameUtil.getNickName());
         return ddataInfo;
     }
 
@@ -230,6 +226,7 @@ public class DdataServiceImpl implements IDdataService
         }
     }
 
+    //获取文件后缀，如pdf
     private String extractExtensionName(String path)
     {
         String suffix = extractSuffix(path);
@@ -342,65 +339,21 @@ public class DdataServiceImpl implements IDdataService
         redisCache.setCacheObject(cacheKey, result);
         return result;
     }
-
-    /* Legacy single-file import implementation, replaced by the shared multi-file flow.
     @Override
-    public Integer insertDdataInfo(DdataInfo ddataInfo, MultipartFile file)
-    {
-        String originalFilename = file == null ? null : file.getOriginalFilename();
-        if (StringUtils.isEmpty(originalFilename))
-        {
-            throw new ServiceException("文件名不能为空");
+    public int renameDataName(List<DdataInfo> ddataInfos){
+        //重命名数据文件，数据名称后添加项目、试验名称
+        ddataInfos.forEach(item -> {
+            String baseName = extractBaseName("/" + item.getDataName());
+            String extension = extractExtensionName("/" + item.getDataName());
+            item.setDataName(baseName + "_" + item.getProjectName() + "_" + item.getExperimentName() + "." + extension);
+        });
+        try{
+            ddataMapper.updateDdataInfos(ddataInfos);
+        } catch (Exception e) {
+            return 0;
         }
-
-        String normalizedOriginalFilename = Paths.get(originalFilename).getFileName().toString();
-        DExperimentInfo experimentInfo = requireExperiment(ddataInfo.getExperimentId());
-        DProjectInfo projectInfo = requireProject(experimentInfo.getProjectId());
-        Path projectRoot = buildProjectRootPath(projectInfo);
-        Path experimentRoot = buildExperimentRootPath(projectInfo, experimentInfo);
-        String targetDataFilePath = buildImportedDataFilePath(normalizedOriginalFilename);
-        Path targetPath = resolveAbsoluteDataPath(experimentRoot, targetDataFilePath);
-
-        try
-        {
-            try (PathLockManager.LockHandle ignored = pathLockManager.lock(
-                    buildLockPaths(projectRoot, experimentRoot),
-                    buildLockPaths(targetPath)))
-            {
-                Path parentPath = targetPath.getParent();
-                if (parentPath != null && Files.notExists(parentPath))
-                {
-                    Files.createDirectories(parentPath);
-                }
-                if(ddataMapper.selectSameNameFile(ddataInfo.getExperimentId(),targetDataFilePath) != null){
-                    throw new ServiceException("文件名重复，请重新输入");
-                }
-
-                FileUploadUtils.assertAllowed(file, MimeTypeUtils.DEFAULT_ALLOWED_EXTENSION);
-                file.transferTo(targetPath);
-
-                ddataInfo.setCreateBy(SecurityUtils.getUsername());
-                ddataInfo.setDataFilePath(targetDataFilePath);
-                ddataInfo.setTargetType(
-                        dTargetInfoMapper.selectDTargetInfoByTargetId(ddataInfo.getTargetId()).getTargetType()
-                );
-
-                ddataInfo.setSampleFrequency(1000);
-                ddataInfo.setDeviceId(null);
-                ddataInfo.setDeviceInfo(null);
-                ddataInfo.setWorkStatus("completed");
-                return ddataMapper.insertDdataInfo(ddataInfo);
-            } catch (InvalidExtensionException e) {
-                throw new RuntimeException(e);
-            }
-        }
-        catch (IOException e)
-        {
-            throw new ServiceException("文件上传失败: " + e.getMessage());
-        }
+        return 1;
     }
-
-    */
     @Override
     public Integer insertDdataInfo(DdataInfo ddataInfo, MultipartFile file)
     {
@@ -567,7 +520,7 @@ public class DdataServiceImpl implements IDdataService
         ddataInfo.setDeviceInfo(null);
         ddataInfo.setWorkStatus("completed");
         ddataInfo.setExtAttr(template.getExtAttr());
-        ddataInfo.setCreateBy(SecurityUtils.getUsername());
+        ddataInfo.setCreateBy(NickNameUtil.getNickName());
         return ddataInfo;
     }
 
@@ -637,101 +590,6 @@ public class DdataServiceImpl implements IDdataService
         return "/".equals(extractDirectory("/" + StringUtils.removeStart(normalizedPath, "/")));
     }
 
-    /* Legacy batch-import helpers kept only as historical reference after the shared import flow.
-    private void insertBatchImportedDataFile(DdataInfo ddataInfo, MultipartFile file)
-    {
-        String originalFilename = file == null ? null : file.getOriginalFilename();
-        if (StringUtils.isEmpty(originalFilename))
-        {
-            throw new ServiceException("文件名不能为空");
-        }
-
-        String normalizedOriginalFilename = Paths.get(originalFilename).getFileName().toString();
-        DExperimentInfo experimentInfo = requireExperiment(ddataInfo.getExperimentId());
-        DProjectInfo projectInfo = requireProject(experimentInfo.getProjectId());
-        Path projectRoot = buildProjectRootPath(projectInfo);
-        Path experimentRoot = buildExperimentRootPath(projectInfo, experimentInfo);
-        String targetDataFilePath = buildImportedDataFilePath(normalizedOriginalFilename);
-        targetDataFilePath = resolveAvailableExperimentStoragePath(
-                ddataInfo.getExperimentId(),
-                experimentRoot,
-                targetDataFilePath
-        );
-        Path targetPath = resolveAbsoluteDataPath(experimentRoot, targetDataFilePath);
-
-        try
-        {
-            try (PathLockManager.LockHandle ignored = pathLockManager.lock(
-                    buildLockPaths(projectRoot, experimentRoot),
-                    buildLockPaths(targetPath)))
-            {
-                Path parentPath = targetPath.getParent();
-                if (parentPath != null && Files.notExists(parentPath))
-                {
-                    Files.createDirectories(parentPath);
-                }
-
-                FileUploadUtils.assertAllowed(file, MimeTypeUtils.DEFAULT_ALLOWED_EXTENSION);
-                file.transferTo(targetPath);
-
-                DdataInfo insertDataInfo =
-                        buildBatchImportedDataInfo(ddataInfo, normalizedOriginalFilename, targetDataFilePath);
-                ddataMapper.insertDdataInfo(insertDataInfo);
-            }
-            catch (InvalidExtensionException e)
-            {
-                throw new RuntimeException(e);
-            }
-        }
-        catch (IOException e)
-        {
-            throw new ServiceException("文件上传失败: " + e.getMessage());
-        }
-    }
-
-    private DdataInfo buildBatchImportedDataInfo(
-            DdataInfo template,
-            String originalFilename,
-            String targetDataFilePath)
-    {
-        DdataInfo ddataInfo = new DdataInfo();
-        ddataInfo.setExperimentId(template.getExperimentId());
-        ddataInfo.setTargetId(template.getTargetId());
-        ddataInfo.setTargetType(resolveBusinessImportTargetType(template));
-        ddataInfo.setTargetCategory(template.getTargetCategory());
-        ddataInfo.setDataName(StringUtils.isNotEmpty(template.getDataName()) ? template.getDataName() : originalFilename);
-        ddataInfo.setDataType(template.getDataType());
-        ddataInfo.setDataFilePath(targetDataFilePath);
-        ddataInfo.setIsSimulation(template.getIsSimulation());
-        ddataInfo.setSampleFrequency(1000);
-        ddataInfo.setDeviceId(null);
-        ddataInfo.setDeviceInfo(null);
-        ddataInfo.setWorkStatus("completed");
-        ddataInfo.setExtAttr(template.getExtAttr());
-        ddataInfo.setCreateBy(SecurityUtils.getUsername());
-        return ddataInfo;
-    }
-
-    */
-    /* Legacy target-type resolver retained only to isolate old encoding issues.
-    private String resolveBusinessImportTargetType(DdataInfo ddataInfo)
-    {
-        if (StringUtils.isNotEmpty(ddataInfo.getTargetType()))
-        {
-            return ddataInfo.getTargetType();
-        }
-        if (StringUtils.isEmpty(ddataInfo.getTargetId()))
-        {
-            return null;
-        }
-        if (dTargetInfoMapper.selectDTargetInfoByTargetId(ddataInfo.getTargetId()) == null)
-        {
-            throw new ServiceException("目标不存在");
-        }
-        return dTargetInfoMapper.selectDTargetInfoByTargetId(ddataInfo.getTargetId()).getTargetType();
-    }
-
-    */
     private String resolveBusinessImportTargetType(DdataInfo ddataInfo)
     {
         if (StringUtils.isNotEmpty(ddataInfo.getTargetType()))
@@ -927,7 +785,7 @@ public class DdataServiceImpl implements IDdataService
         ddataInfo.setExperimentId(targetExperimentId);
         ddataInfo.setDataFilePath(targetDataFilePath);
         ddataInfo.setFileName(safeFileName);
-        ddataInfo.setUpdateBy(SecurityUtils.getUsername());
+        ddataInfo.setUpdateBy(NickNameUtil.getNickName());
         redisCache.deleteObject(CacheConstants.DATA_INFO_KEY + ddataInfo.getId());
         return ddataMapper.updateDdataInfo(ddataInfo);
     }

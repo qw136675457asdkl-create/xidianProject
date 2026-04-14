@@ -31,7 +31,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -275,6 +274,33 @@ public class DBussinessDataInfoController extends BaseController
             FileUtils.downloadFile(absolutePath.toString(), FileUtils.getName(relativePath), response);
         }
     }
+
+    @PreAuthorize("@ss.hasPermi('dataInfo:info:Rename')")
+    @PutMapping("/rename")
+    @Log(title = "规范重命名业务数据文件", businessType = BusinessType.UPDATE)
+    public AjaxResult renameDDataInfoFile(@RequestBody List<DdataInfo> ddataInfo)
+    {
+        if (ddataInfo.isEmpty())
+        {
+            throw new ServiceException("规范重命名参数不能为空");
+        }
+        for (DdataInfo ddataInfoItem : ddataInfo)
+        {
+            if (StringUtils.isEmpty(ddataInfoItem.getExperimentId()) || StringUtils.isEmpty(ddataInfoItem.getDataName()))
+            {
+                throw new ServiceException("规范重命名参数不能为空");
+            }
+        }
+        //重命名数据文件，数据名称后添加项目、试验名称
+        if(ddataService.renameDataName(ddataInfo)!=0){
+            return AjaxResult.success("命名成功");
+        }else{
+            return AjaxResult.error("命名失败");
+        }
+    }
+
+
+
 
     private Path buildProjectRoot(String projectPath)
     {

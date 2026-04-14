@@ -3,6 +3,7 @@ package com.ruoyi.Xidian.mapper;
 import java.util.List;
 import com.ruoyi.Xidian.domain.DExperimentInfo;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
 /**
  * 试验信息主Mapper接口
@@ -62,4 +63,6 @@ public interface DExperimentInfoMapper
     public int deleteDExperimentInfoByExperimentIds(String[] experimentIds);
 
     List<DExperimentInfo> selectDExperimentInfoByExperimentIds(List<String> experimentIds);
+
+    public DExperimentInfo selectSamePathExperiment(@Param("experimentId") String experimentName,@Param("projectId") Long projectId);
 }

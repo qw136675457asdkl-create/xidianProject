@@ -8,13 +8,13 @@ import com.ruoyi.Xidian.service.IDExperimentInfoService;
 import com.ruoyi.Xidian.service.IDProjectInfoService;
 import com.ruoyi.Xidian.service.IDTargetInfoService;
 import com.ruoyi.Xidian.service.IDdataService;
+import com.ruoyi.Xidian.utils.NickNameUtil;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.exception.ServiceException;
-import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.uuid.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -116,7 +116,7 @@ public class DExperimentInfoController extends BaseController
         {
             DProjectInfo dProjectInfo = new DProjectInfo();
             dProjectInfo.setProjectName(treeTableVo.getName());
-            dProjectInfo.setCreateBy(SecurityUtils.getUsername());
+            dProjectInfo.setCreateBy(NickNameUtil.getNickName());
             dProjectInfo.setProjectContentDesc(treeTableVo.getContentDesc());
             try
             {
@@ -144,7 +144,7 @@ public class DExperimentInfoController extends BaseController
             DExperimentInfo dExperimentInfo = new DExperimentInfo();
             dExperimentInfo.setExperimentId(UUID.randomUUID().toString());
             dExperimentInfo.setExperimentName(treeTableVo.getName());
-            dExperimentInfo.setCreateBy(SecurityUtils.getUsername());
+            dExperimentInfo.setCreateBy(NickNameUtil.getNickName());
             dExperimentInfo.setContentDesc(treeTableVo.getContentDesc());
             dExperimentInfo.setLocation(treeTableVo.getLocation());
             dExperimentInfo.setTargetId(treeTableVo.getTargetId());

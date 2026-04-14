@@ -38,4 +38,6 @@ public interface IDdataService {
     {
         uploadFiles(files, experimentId);
     }
+
+    int renameDataName(List<DdataInfo> ddataInfo);
 }
