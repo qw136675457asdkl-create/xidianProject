@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.Xidian.mapper.BackDataMapper">
+    <resultMap id="BackupDataResultMap" type="BackupData">
+        <id column="id" property="id"/>
+        <result column="data_info_id" property="dataInfoId"/>
+        <result column="restored_data_info_id" property="restoredDataInfoId"/>
+        <result column="target_id" property="targetId"/>
+        <result column="target_type" property="targetType"/>
+        <result column="target_category" property="targetCategory"/>
+        <result column="experiment_id" property="experimentId"/>
+        <result column="experiment_name" property="experimentName"/>
+        <result column="project_id" property="projectId"/>
+        <result column="project_name" property="projectName"/>
+        <result column="data_name" property="dataName"/>
+        <result column="data_type" property="dataType"/>
+        <result column="device_id" property="deviceId"/>
+        <result column="device_info" property="deviceInfo"/>
+        <result column="sample_frequency" property="sampleFrequency"/>
+        <result column="work_status" property="workStatus"/>
+        <result column="is_simulation" property="isSimulation"/>
+        <result column="ext_attr" property="extAttr"/>
+        <result column="source_path" property="sourcePath"/>
+        <result column="backup_file_path" property="backupFilePath"/>
+        <result column="delete_by" property="deleteBy"/>
+        <result column="delete_time" property="deleteTime"/>
+        <result column="restore_by" property="restoreBy"/>
+        <result column="restore_time" property="restoreTime"/>
+        <result column="is_restored" property="isRestored"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+    <sql id="Base_Column_List">
+        id,
+    data_info_id,
+    restored_data_info_id,
+    target_id,
+    target_type,
+    target_category,
+    experiment_id,
+    experiment_name,
+    project_id,
+    project_name,
+    data_name,
+    data_type,
+    device_id,
+    device_info,
+    sample_frequency,
+    work_status,
+    is_simulation,
+    source_path,
+    backup_file_path,
+    delete_by,
+    delete_time,
+    restore_by,
+    restore_time,
+    is_restored,
+    ext_attr,
+    remark,
+    create_by,
+    create_time,
+    update_by,
+    update_time
+    </sql>
+    <insert id="insertBackupData" parameterType="BackupData" useGeneratedKeys="true" keyProperty="id" keyColumn="ID">
+        insert into SYSTEM_COLLABORATION_TEST.MD_BACKUP_DATA (
+            data_info_id,
+            restored_data_info_id,
+            target_id,
+            target_type,
+            target_category,
+            experiment_id,
+            experiment_name,
+            project_id,
+            project_name,
+            data_name,
+            data_type,
+            device_id,
+            device_info,
+            sample_frequency,
+            work_status,
+            is_simulation,
+            source_path,
+            backup_file_path,
+            delete_by,
+            delete_time,
+            restore_by,
+            restore_time,
+            is_restored,
+            ext_attr,
+            remark,
+            create_by,
+            create_time,
+            update_by,
+            update_time
+        ) values (
+            #{dataInfoId},
+            #{restoredDataInfoId},
+            #{targetId},
+            #{targetType},
+            #{targetCategory},
+            #{experimentId},
+            #{experimentName},
+            #{projectId},
+            #{projectName},
+            #{dataName},
+            #{dataType},
+            #{deviceId},
+            #{deviceInfo},
+            #{sampleFrequency},
+            #{workStatus},
+            #{isSimulation},
+            #{sourcePath},
+            #{backupFilePath},
+            #{deleteBy},
+            #{deleteTime},
+            #{restoreBy},
+            #{restoreTime},
+            #{isRestored},
+            #{extAttr},
+            #{remark},
+            #{createBy},
+            #{createTime},
+            #{updateBy},
+            #{updateTime}
+        )
+    </insert>
+    <update id="updateBackupData" parameterType="BackupData">
+        update SYSTEM_COLLABORATION_TEST.MD_BACKUP_DATA
+        <set>
+            <if test="dataInfoId != null">data_info_id = #{dataInfoId},</if>
+            <if test="restoredDataInfoId != null">restored_data_info_id = #{restoredDataInfoId},</if>
+            <if test="targetId != null and targetId != ''">target_id = #{targetId},</if>
+            <if test="targetType != null and targetType != ''">target_type = #{targetType},</if>
+            <if test="targetCategory != null and targetCategory != ''">target_category = #{targetCategory},</if>
+            <if test="experimentId != null and experimentId != ''">experiment_id = #{experimentId},</if>
+            <if test="experimentName != null and experimentName != ''">experiment_name = #{experimentName},</if>
+            <if test="projectId != null">project_id = #{projectId},</if>
+            <if test="projectName != null and projectName != ''">project_name = #{projectName},</if>
+            <if test="dataName != null and dataName != ''">data_name = #{dataName},</if>
+            <if test="dataType != null and dataType != ''">data_type = #{dataType},</if>
+            <if test="deviceId != null and deviceId != ''">device_id = #{deviceId},</if>
+            <if test="deviceInfo != null and deviceInfo != ''">device_info = #{deviceInfo},</if>
+            <if test="sampleFrequency != null">sample_frequency = #{sampleFrequency},</if>
+            <if test="workStatus != null and workStatus != ''">work_status = #{workStatus},</if>
+            <if test="isSimulation != null">is_simulation = #{isSimulation},</if>
+            <if test="sourcePath != null and sourcePath != ''">source_path = #{sourcePath},</if>
+            <if test="backupFilePath != null and backupFilePath != ''">backup_file_path = #{backupFilePath},</if>
+            <if test="deleteBy != null and deleteBy != ''">delete_by = #{deleteBy},</if>
+            <if test="deleteTime != null">delete_time = #{deleteTime},</if>
+            <if test="restoreBy != null and restoreBy != ''">restore_by = #{restoreBy},</if>
+            <if test="restoreTime != null">restore_time = #{restoreTime},</if>
+            <if test="isRestored != null">is_restored = #{isRestored},</if>
+            <if test="extAttr != null and extAttr != ''">ext_attr = #{extAttr},</if>
+            <if test="remark != null and remark != ''">remark = #{remark},</if>
+            <if test="createBy != null and createBy != ''">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+        </set>
+        where id = #{id}
+    </update>
+    <select id="selectBackupDataById" parameterType="Integer" resultMap="BackupDataResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from SYSTEM_COLLABORATION_TEST.MD_BACKUP_DATA
+        where id = #{id}
+    </select>
+    <select id="selectBackupDataList" parameterType="BackupData" resultMap="BackupDataResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from SYSTEM_COLLABORATION_TEST.MD_BACKUP_DATA
+        <where>
+            <if test="dataInfoId != null">
+                and data_info_id = #{dataInfoId}
+            </if>
+            <if test="restoredDataInfoId != null">
+                and restored_data_info_id = #{restoredDataInfoId}
+            </if>
+            <if test="targetId != null and targetId != ''">
+                and target_id = #{targetId}
+            </if>
+            <if test="targetType != null and targetType != ''">
+                and target_type = #{targetType}
+            </if>
+            <if test="targetCategory != null and targetCategory != ''">
+                and target_category = #{targetCategory}
+            </if>
+            <if test="experimentId != null and experimentId != ''">
+                and experiment_id = #{experimentId}
+            </if>
+            <if test="experimentName != null and experimentName != ''">
+                and experiment_name like concat('%', #{experimentName}, '%')
+            </if>
+            <if test="projectId != null">
+                and project_id = #{projectId}
+            </if>
+            <if test="projectName != null and projectName != ''">
+                and project_name like concat('%', #{projectName}, '%')
+            </if>
+            <if test="dataName != null and dataName != ''">
+                and data_name like concat('%', #{dataName}, '%')
+            </if>
+            <if test="dataType != null and dataType != ''">
+                and data_type = #{dataType}
+            </if>
+            <if test="sourcePath != null and sourcePath != ''">
+                and source_path like concat('%', #{sourcePath}, '%')
+            </if>
+            <if test="backupFilePath != null and backupFilePath != ''">
+                and backup_file_path like concat('%', #{backupFilePath}, '%')
+            </if>
+            <if test="isSimulation != null">
+                and is_simulation = #{isSimulation}
+            </if>
+            <if test="deleteBy != null and deleteBy != ''">
+                and delete_by like concat('%', #{deleteBy}, '%')
+            </if>
+            <if test="restoreBy != null and restoreBy != ''">
+                and restore_by like concat('%', #{restoreBy}, '%')
+            </if>
+            <if test="isRestored != null">
+                and is_restored = #{isRestored}
+            </if>
+            <if test="params.beginTime != null and params.beginTime != ''">
+                and date_format(delete_time,'%y%m%d') <![CDATA[ >= ]]> date_format(#{params.beginTime},'%y%m%d')
+            </if>
+            <if test="params.endTime != null and params.endTime != ''">
+                and date_format(delete_time,'%y%m%d') <![CDATA[ <= ]]> date_format(#{params.endTime},'%y%m%d')
+            </if>
+        </where>
+        order by delete_time desc, id desc
+    </select>
+    <select id="selectBackupDataByDataId" parameterType="Integer" resultMap="BackupDataResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from SYSTEM_COLLABORATION_TEST.MD_BACKUP_DATA
+        where DATA_INFO_ID = #{dataInfoId} AND IS_RESTORED = 0
+    </select>
+    <delete id="deleteBackupDataById" parameterType="Integer">
+        delete from SYSTEM_COLLABORATION_TEST.MD_BACKUP_DATA
+        where id = #{id}
+    </delete>
+
+    <delete id="deleteBackupDataByIds" parameterType="String">
+        delete from SYSTEM_COLLABORATION_TEST.MD_BACKUP_DATA
+        where id in
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>

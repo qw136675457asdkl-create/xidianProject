@@ -54,838 +54,134 @@
                 </div>
             </aside>
             <div class="pane-content data-pane">
-                    <section class="action-surface action-surface--merged">
-                        <el-form v-show="showSearch" :model="queryParams" ref="queryRef" :inline="true" label-width="88px" class="query-form">
-                            <el-form-item label="ID" prop="id">
-                                <el-input v-model="queryParams.id" placeholder="请输入数据ID" clearable class="query-control" @keyup.enter="handleQuery" />
-                            </el-form-item>
-                            <el-form-item label="数据名称" prop="dataName">
-                                <el-input v-model="queryParams.dataName" placeholder="请输入数据名称" clearable class="query-control" @keyup.enter="handleQuery" />
-                            </el-form-item>
-                            <el-form-item label="试验名称" prop="experimentName">
-                                <el-input v-model="queryParams.experimentName" placeholder="请输入试验名称" clearable class="query-control" @keyup.enter="handleQuery" />
-                            </el-form-item>
-                            <el-form-item label="所属项目" prop="projectId">
-                                <el-select v-model="queryParams.projectId" placeholder="请选择所属项目" clearable class="query-control">
-                                    <el-option v-for="item in projectOptions" :key="item.projectId" :label="item.projectName" :value="item.projectId" />
-                                </el-select>
-                            </el-form-item>
+                    <DataQueryPanel
+                        :show-search="showSearch"
+                        :query-params="queryParams"
+                        :date-range="dateRange"
+                        :project-options="projectOptions"
+                        :ids-length="ids.length"
+                        :multiple="multiple"
+                        @update:date-range="dateRange = $event"
+                        @add-project="handleAddProject"
+                        @add-experiment="handleAddExperiment"
+                        @open-import="openFileManager"
+                        @export-data="handleExportData"
+                        @rename-data="handleRenameData"
+                        @compare-data="handleCompareData"
+                        @restore-data="handleRestoreData"
+                        @delete-data="handleDelete()"
+                        @search="handleQuery"
+                        @reset="resetQuery"
+                    />
 
-                            <el-form-item label="创建人" prop="createBy">
-                                <el-input v-model="queryParams.createBy" placeholder="请输入创建人" clearable class="query-control" @keyup.enter="handleQuery" />
-                            </el-form-item>
-                            <el-form-item label="是否模拟" prop="isSimulation">
-                                <el-select v-model="queryParams.isSimulation" placeholder="请选择数据类型" clearable class="query-control">
-                                    <el-option label="真实" :value="true" />
-                                    <el-option label="模拟" :value="false" />
-                                </el-select>
-                            </el-form-item>
-                            <el-form-item label="数据状态" prop="workStatus">
-                                <el-input v-model="queryParams.workStatus" placeholder="请输入数据状态" clearable class="query-control" @keyup.enter="handleQuery" />
-                            </el-form-item>
-                            <el-form-item label="创建时间" class="query-date-item">
-                                <el-date-picker
-                                    v-model="dateRange"
-                                    value-format="YYYY-MM-DD"
-                                    type="daterange"
-                                    range-separator="-"
-                                    start-placeholder="开始日期"
-                                    end-placeholder="结束日期"
-                                    class="query-date-control"
-                                />
-                            </el-form-item>
-                        </el-form>
-                        <div v-show="showSearch" class="action-surface__divider"></div>
-                        <div class="action-surface__toolbar">
-                            <div class="global-actions-row">
-                                <el-button
-                                  class="toolbar-action-btn toolbar-action-btn--project"
-                                  type="primary"
-                                  @click="handleAddProject"
-                                  v-hasPermi="['data:info:addProject']"
-                                >
-                                  <template #icon>
-                                    <svg-icon icon-class="input" />
-                                  </template>
-                                  新增项目
-                                </el-button>
-                                <el-button
-                                  class="toolbar-action-btn toolbar-action-btn--experiment"
-                                  type="primary"
-                                  @click="handleAddExperiment"
-                                  v-hasPermi="['data:info:addExperiment']"
-                                >
-                                  <template #icon>
-                                    <svg-icon icon-class="button" />
-                                  </template>
-                                  新增试验
-                                </el-button>
-                                <el-button
-                                  class="toolbar-action-btn toolbar-action-btn--import"
-                                  type="primary"
-                                  @click="openFileManager"
-                                  v-hasPermi="['dataInfo:info:insert']"
-                                >
-                                  <template #icon>
-                                    <svg-icon icon-class="upload" />
-                                  </template>
-                                  数据导入
-                                </el-button>
-                                <el-button
-                                  class="toolbar-action-btn toolbar-action-btn--export"
-                                  type="primary"
-                                  @click="handleExportData"
-                                  v-hasPermi="['dataInfo:info:download']"
-                                >
-                                  <template #icon>
-                                    <svg-icon icon-class="download" />
-                                  </template>
-                                  导出
-                                </el-button>
-                                <el-button
-                                  class="toolbar-action-btn toolbar-action-btn--export"
-                                  type="primary"
-                                  @click="handleRenameData"
-                                  v-hasPermi="['dataInfo:info:Rename']"
-                                >
-                                  <template #icon>
-                                    <svg-icon icon-class="rename" />
-                                  </template>
-                                  规范重命名
-                                </el-button>
-                                <el-button class="toolbar-action-btn toolbar-action-btn--compare"
-                                  type="primary"
-                                  :disabled="ids.length < 2"
-                                  @click="handleCompareData"
-                                  v-hasPermi="['dataInfo:info:compare']"
-                                >
-                                  <template #icon>
-                                    <svg-icon icon-class="compare" />
-                                  </template>
-                                数据比对
-                                </el-button>
-                                <el-button
-                                  class="toolbar-action-btn toolbar-action-btn--delete"
-                                  type="danger"
-                                  icon="Delete"
-                                  :disabled="multiple"
-                                  @click="handleDelete()"
-                                  v-hasPermi="['dataInfo:info:delete']"
-                                >
-                                  删除
-                                </el-button>
-                            </div>
-                            <div class="toolbar-query-actions">
-                                <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-                                <el-button class="query-reset-btn" icon="Refresh" @click="resetQuery">重置</el-button>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="table-surface">
-                        <div class="table-surface__header">
-                            <div>
-                                <h4 class="table-surface__title">数据清单</h4>
-                            </div>
-                        </div>
-
-                        <el-table v-loading="loading" :data="businessList" class="data-table" empty-text="暂无符合条件的数据" @selection-change="handleSelectionChange">
-                            <el-table-column type="selection" width="55" align="center" />
-                            <el-table-column label="ID" align="center" prop="id" />
-                            <el-table-column label="数据名称" align="center" prop="dataName" :show-overflow-tooltip="true" />
-                            <el-table-column label="是否模拟" align="center" prop="isSimulation" >
-                                <template #default="scope">
-                                    <el-tag class="status-chip" effect="light" round :type="scope.row.isSimulation === true ? 'success' : scope.row.isSimulation === false ? 'warning' : 'info'">
-                                        <span v-if="scope.row.isSimulation === true">真实数据</span>
-                                        <span v-else-if="scope.row.isSimulation === false">模拟数据</span>
-                                        <span v-else>未知类型</span>
-                                    </el-tag>
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="所属试验" align="center" prop="experimentName" :show-overflow-tooltip="true" />
-                            <el-table-column label="所属项目" align="center" prop="projectName" :show-overflow-tooltip="true" />
-                            <el-table-column label="试验目标" align="center" prop="targetType" :show-overflow-tooltip="true" />
-                            <el-table-column label="试验时间" align="center" prop="startTime" >
-                                <template #default="scope">
-                                    <span>{{ parseTime(scope.row.startTime) }}</span>
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="试验地点" align="center" prop="location" :show-overflow-tooltip="true" />
-                            <el-table-column label="试验描述" align="center" prop="contentDesc" :show-overflow-tooltip="true" />
-                            <el-table-column label="创建人" align="center" prop="createBy" />
-                            <el-table-column label="创建时间" align="center" prop="createTime" >
-                                <template #default="scope">
-                                    <span>{{ parseTime(scope.row.createTime) }}</span>
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="数据种类" align="center" prop="dataType" :show-overflow-tooltip="true">
-                                <template #default="scope">
-                                    <span class="data-type-pill">{{ scope.row.dataType || '--' }}</span>
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="操作" align="center" class-name="small-padding fixed-width table-action-cell" width="132">
-                                <template #default="scope">
-                                    <div class="table-action-group">
-                                        <el-tooltip content="详情" placement="top">
-                                            <el-button link type="primary" icon="View" @click="handleView(scope.row)" v-hasPermi="['dataInfo:info:query']"></el-button>
-                                        </el-tooltip>
-                                        <el-tooltip content="修改" placement="top">
-                                            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['dataInfo:info:update']"></el-button>
-                                        </el-tooltip>
-                                        <el-tooltip content="删除" placement="top">
-                                            <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['dataInfo:info:delete']"></el-button>
-                                        </el-tooltip>
-                                    </div>
-                                </template>
-                            </el-table-column>
-                        </el-table>
-                        <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
-                    </section>
+                    <DataTablePanel
+                        :loading="loading"
+                        :business-list="businessList"
+                        :total="total"
+                        :page-num="queryParams.pageNum"
+                        :page-size="queryParams.pageSize"
+                        :format-time="formatListTime"
+                        @selection-change="handleSelectionChange"
+                        @update:page-num="queryParams.pageNum = $event"
+                        @update:page-size="queryParams.pageSize = $event"
+                        @pagination="getList"
+                        @backup="handleBackupData"
+                        @view="handleView"
+                        @update="handleUpdate"
+                        @delete="handleDelete"
+                    />
                 </div>
             </div>
 
-        <el-dialog
+        <ComparePreviewDialog
             v-model="compareDialogVisible"
-            width="88%"
-            top="4vh"
-            class="compare-preview-dialog"
-            append-to-body
+            :items="comparePreviewItems"
+            :max-height="comparePreviewDialogBodyMaxHeight"
+            :item-height="comparePreviewItemHeight"
             @closed="handleCompareDialogClosed"
-        >
-            <template #header>
-                <div class="compare-preview-dialog__header">
-                    <div>
-                        <div class="compare-preview-dialog__title">数据比对</div>
-                        <div class="compare-preview-dialog__subtitle">已选 {{ comparePreviewItems.length }} 条数据，展示区域会根据数量自动调整</div>
-                    </div>
-                </div>
-            </template>
+        />
 
-            <div class="compare-preview-dialog__body" :style="{ maxHeight: comparePreviewDialogBodyMaxHeight }">
-                <div v-if="comparePreviewItems.length > 0" class="compare-preview-list">
-                    <section v-for="item in comparePreviewItems" :key="item.id" class="compare-preview-item">
-                        <header class="compare-preview-item__header">
-                            <div class="compare-preview-item__title">{{ item.title }}</div>
-                            <div class="compare-preview-item__meta">{{ getComparePreviewMeta(item) }}</div>
-                        </header>
+        <BackupDataDialog
+            v-model="backupDialogVisible"
+            :loading="backupLoading"
+            :backup-list="backupList"
+            :total="backupTotal"
+            :query-params="backupQueryParams"
+            :date-range="backupDateRange"
+            :format-time="formatListTime"
+            @update:date-range="backupDateRange = $event"
+            @search="handleBackupQuery"
+            @reset="resetBackupQuery"
+            @pagination="getBackupList"
+        />
 
-                        <div v-loading="item.loading" class="compare-preview-item__body" :style="{ height: comparePreviewItemHeight }">
-                            <div v-if="item.previewType === 'table'">
-                                <el-table v-if="item.rows.length > 0" :data="item.rows" border stripe :height="comparePreviewItemHeight">
-                                    <el-table-column
-                                        v-for="header in getCompareTableColumns(item)"
-                                        :key="header"
-                                        :prop="header"
-                                        :label="header"
-                                        show-overflow-tooltip
-                                    />
-                                </el-table>
-                                <el-empty v-else :description="item.message || '暂无表格内容'" />
-                            </div>
-
-                            <div v-else-if="item.previewType === 'text'" class="compare-text-preview">
-                                <div v-if="item.rows.length > 0" class="compare-text-preview__body" :style="{ height: comparePreviewItemHeight }">
-                                    <div
-                                        v-for="(line, index) in getCompareTextLines(item)"
-                                        :key="`${item.id}-${index}`"
-                                        class="compare-text-preview__line"
-                                    >
-                                        <span class="compare-text-preview__line-number">{{ index + 1 }}</span>
-                                        <pre class="compare-text-preview__line-content">{{ line }}</pre>
-                                    </div>
-                                </div>
-                                <el-empty v-else :description="item.message || '暂无文本内容'" />
-                            </div>
-
-                            <div v-else-if="item.previewType === 'pdf'" class="compare-media-preview">
-                                <iframe v-if="item.objectUrl" :src="item.objectUrl" class="compare-media-preview__frame" title="PDF比对预览" />
-                                <el-empty v-else :description="item.message || '暂无 PDF 预览内容'" />
-                            </div>
-
-                            <div v-else-if="item.previewType === 'image'" class="compare-media-preview">
-                                <img v-if="item.objectUrl" :src="item.objectUrl" :alt="item.title" class="compare-media-preview__image" />
-                                <el-empty v-else :description="item.message || '暂无图片预览内容'" />
-                            </div>
-
-                            <div v-else-if="item.previewType === 'audio'" class="compare-media-preview compare-media-preview--audio">
-                                <audio v-if="item.objectUrl" :src="item.objectUrl" controls class="compare-media-preview__audio" />
-                                <el-empty v-else :description="item.message || '暂无音频预览内容'" />
-                            </div>
-
-                            <div v-else-if="item.previewType === 'video'" class="compare-media-preview">
-                                <video v-if="item.objectUrl" :src="item.objectUrl" controls class="compare-media-preview__video" />
-                                <el-empty v-else :description="item.message || '暂无视频预览内容'" />
-                            </div>
-
-                            <div v-else class="compare-preview-item__empty">
-                                <el-empty :description="item.message || '暂不支持在线比对该文件'" />
-                            </div>
-                        </div>
-                    </section>
-                </div>
-                <el-empty v-else description="请选择需要比对的数据" />
-            </div>
-
-            <template #footer>
-                <div class="dialog-footer">
-                    <el-button @click="compareDialogVisible = false">关 闭</el-button>
-                </div>
-            </template>
-        </el-dialog>
-
-        <!-- 添加项目信息对话框 -->
-        <el-dialog
-            title="新增项目"
+        <ProjectInfoDialog
             v-model="projectInfoDialogOpen"
-            width="560px"
-            class="ant-form-dialog"
-            :close-on-click-modal="!projectInfoSubmitLoading"
-            :close-on-press-escape="!projectInfoSubmitLoading"
-            append-to-body
+            :loading="projectInfoSubmitLoading"
+            :form-model="projectInfoForm"
+            :rules="projectInfoRules"
+            @submit="submitProjectInfoForm"
             @closed="resetProjectInfoForm"
-        >
-            <el-form ref="projectInfoFormRef" :model="projectInfoForm" :rules="projectInfoRules" label-width="84px" class="ant-form-layout">
-                <el-form-item label="名称" prop="name">
-                    <el-input v-model="projectInfoForm.name" placeholder="请输入项目名称" />
-                    <template #error="{ error }">
-                        <transition name="form-error-slide">
-                            <div v-if="error" class="form-error-tip">{{ error }}</div>
-                        </transition>
-                    </template>
-                </el-form-item>
-                <el-form-item label="内容描述" prop="contentDesc">
-                    <el-input
-                        v-model="projectInfoForm.contentDesc"
-                        type="textarea"
-                        :maxlength="200"
-                        show-word-limit
-                        :autosize="{ minRows: 4, maxRows: 6 }"
-                        placeholder="请输入内容"
-                    />
-                    <template #error="{ error }">
-                        <transition name="form-error-slide">
-                            <div v-if="error" class="form-error-tip">{{ error }}</div>
-                        </transition>
-                    </template>
-                </el-form-item>
-                <el-form-item label="路径" prop="path">
-                    <el-input
-                        v-model="projectInfoForm.path"
-                        placeholder="系统自动生成路径"
-                        disabled
-                    />
-                </el-form-item>
-            </el-form>
-            <template #footer>
-                <div class="dialog-footer">
-                    <el-button type="primary" class="ant-confirm-btn" :loading="projectInfoSubmitLoading" @click="submitProjectInfoForm">确 定</el-button>
-                    <el-button class="ant-cancel-btn" :disabled="projectInfoSubmitLoading" @click="cancelProjectInfoDialog">取 消</el-button>
-                </div>
-            </template>
-        </el-dialog>
+        />
 
-        <!-- 添加试验信息对话框 -->
-        <el-dialog
-            title="新增试验"
+        <ExperimentInfoDialog
             v-model="experimentInfoDialogOpen"
-            width="620px"
-            class="ant-form-dialog"
-            :close-on-click-modal="!experimentInfoSubmitLoading"
-            :close-on-press-escape="!experimentInfoSubmitLoading"
-            append-to-body
+            :loading="experimentInfoSubmitLoading"
+            :form-model="experimentInfoForm"
+            :rules="experimentInfoRules"
+            :project-options="projectOptions"
+            :target-type-options="targetTypeOptions"
+            :draft-files="experimentDraftFiles"
+            :progress="experimentUploadProgress"
+            :accept="EXPERIMENT_UPLOAD_ACCEPT"
+            :format-size="formatExperimentFileSize"
+            @submit="submitExperimentInfoForm"
             @closed="resetExperimentInfoForm"
-        >
-            <el-form ref="experimentInfoFormRef" :model="experimentInfoForm" :rules="experimentInfoRules" label-width="84px" class="ant-form-layout">
-                <el-form-item label="名称" prop="name">
-                    <el-input v-model="experimentInfoForm.name" placeholder="请输入试验名称" />
-                    <template #error="{ error }">
-                        <transition name="form-error-slide">
-                            <div v-if="error" class="form-error-tip">{{ error }}</div>
-                        </transition>
-                    </template>
-                </el-form-item>
-                <el-form-item label="所属项目" prop="parentId">
-                    <el-select v-model="experimentInfoForm.parentId" placeholder="请选择所属项目" filterable clearable>
-                        <el-option
-                            v-for="item in projectOptions"
-                            :key="item.projectId"
-                            :label="item.projectName"
-                            :value="item.projectId"
-                        />
-                    </el-select>
-                    <template #error="{ error }">
-                        <transition name="form-error-slide">
-                            <div v-if="error" class="form-error-tip">{{ error }}</div>
-                        </transition>
-                    </template>
-                </el-form-item>
-                <el-form-item label="试验目标" prop="targetId">
-                    <el-select v-model="experimentInfoForm.targetId" placeholder="请选择试验目标">
-                        <el-option
-                            v-for="item in targetTypeOptions"
-                            :key="item.targetId"
-                            :label="item.targetType"
-                            :value="item.targetId"
-                        />
-                    </el-select>
-                    <template #error="{ error }">
-                        <transition name="form-error-slide">
-                            <div v-if="error" class="form-error-tip">{{ error }}</div>
-                        </transition>
-                    </template>
-                </el-form-item>
-                <el-form-item label="试验日期" prop="startTime">
-                    <el-date-picker
-                        v-model="experimentInfoForm.startTime"
-                        type="date"
-                        value-format="YYYY-MM-DD"
-                        placeholder="选择开始日期"
-                        clearable
-                    />
-                    <template #error="{ error }">
-                        <transition name="form-error-slide">
-                            <div v-if="error" class="form-error-tip">{{ error }}</div>
-                        </transition>
-                    </template>
-                </el-form-item>
-                <el-form-item label="试验地点" prop="location">
-                    <el-input v-model="experimentInfoForm.location" placeholder="请输入地点" />
-                    <template #error="{ error }">
-                        <transition name="form-error-slide">
-                            <div v-if="error" class="form-error-tip">{{ error }}</div>
-                        </transition>
-                    </template>
-                </el-form-item>
-                <el-form-item label="内容描述" prop="contentDesc">
-                    <el-input
-                        v-model="experimentInfoForm.contentDesc"
-                        type="textarea"
-                        :maxlength="200"
-                        show-word-limit
-                        :autosize="{ minRows: 4, maxRows: 6 }"
-                        placeholder="请输入内容"
-                    />
-                    <template #error="{ error }">
-                        <transition name="form-error-slide">
-                            <div v-if="error" class="form-error-tip">{{ error }}</div>
-                        </transition>
-                    </template>
-                </el-form-item>
-                <el-form-item label="路径" prop="path">
-                    <el-input
-                        v-model="experimentInfoForm.path"
-                        placeholder="系统自动生成路径"
-                        disabled
-                    />
-                </el-form-item>
+            @draft-change="handleExperimentDraftChange"
+            @folder-change="handleExperimentFolderChange"
+            @clear-files="clearExperimentDraftFiles"
+            @remove-file="removeExperimentDraftFile"
+        />
 
-                <el-divider content-position="left">试验文件上传</el-divider>
-                <el-alert
-                    title="支持上传普通文件、二进制文件、文件夹和 ZIP 压缩包，文件夹结构会保留，ZIP 会自动解压到当前试验目录。"
-                    type="info"
-                    :closable="false"
-                    show-icon
-                    class="experiment-upload__alert"
-                />
-                <el-upload
-                    ref="experimentUploadRef"
-                    drag
-                    action=""
-                    :auto-upload="false"
-                    :show-file-list="false"
-                    multiple
-                    :disabled="experimentInfoSubmitLoading"
-                    :accept="EXPERIMENT_UPLOAD_ACCEPT"
-                    class="experiment-upload"
-                    :on-change="handleExperimentDraftChange"
-                >
-                    <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-                    <div class="el-upload__text">拖拽试验文件到此处，或<em>点击选择文件</em></div>
-                    <template #tip>
-                        <div class="experiment-upload__tip">支持 ZIP、CSV、Excel、TXT、JSON、Word、PDF、BIN、DAT、RAW、PNG、JPG、JPEG 、MP3、MP4；如需上传整个文件夹，请使用下方“选择文件夹”。</div>
-                    </template>
-                </el-upload>
-                <input
-                    ref="experimentFolderInputRef"
-                    class="experiment-upload__folder-input"
-                    type="file"
-                    webkitdirectory
-                    multiple
-                    :disabled="experimentInfoSubmitLoading"
-                    :accept="EXPERIMENT_UPLOAD_ACCEPT"
-                    @change="handleExperimentFolderChange"
-                />
-                <div class="experiment-upload__meta">
-                    <span class="experiment-upload__count">已选择 {{ experimentDraftFiles.length }} 个待上传文件</span>
-                    <div class="experiment-upload__actions">
-                        <el-button link type="primary" :disabled="experimentInfoSubmitLoading" @click="openExperimentFolderPicker">
-                            <el-icon><ElIconFolder /></el-icon>
-                            <span>选择文件夹</span>
-                        </el-button>
-                        <el-button link type="primary" :disabled="!experimentDraftFiles.length || experimentInfoSubmitLoading" @click="clearExperimentDraftFiles">清空文件</el-button>
-                    </div>
-                </div>
-                <div v-if="experimentUploadProgress.visible" class="experiment-upload__progress">
-                    <div class="experiment-upload__progress-text">{{ experimentUploadProgress.text }}</div>
-                    <el-progress :percentage="experimentUploadProgress.percentage" :status="experimentUploadProgress.status" :stroke-width="10" />
-                </div>
-                <div v-if="experimentDraftFiles.length" class="experiment-upload__list">
-                    <div v-for="file in experimentDraftFiles" :key="file.uid" class="experiment-upload__list-item">
-                        <div class="experiment-upload__list-main">
-                            <el-icon class="experiment-upload__list-icon"><ElIconDocument /></el-icon>
-                            <span class="experiment-upload__list-name" :title="file.name">{{ file.name }}</span>
-                        </div>
-                        <div class="experiment-upload__list-side">
-                            <span class="experiment-upload__list-size">{{ formatExperimentFileSize(file.size) }}</span>
-                            <el-button link type="danger" :disabled="experimentInfoSubmitLoading" @click="removeExperimentDraftFile(file.uid)">移除</el-button>
-                        </div>
-                    </div>
-                </div>
-            </el-form>
-            <template #footer>
-                <div class="dialog-footer">
-                    <el-button type="primary" class="ant-confirm-btn" :loading="experimentInfoSubmitLoading" @click="submitExperimentInfoForm">确 定</el-button>
-                    <el-button class="ant-cancel-btn" :disabled="experimentInfoSubmitLoading" @click="cancelExperimentInfoDialog">取 消</el-button>
-                </div>
-            </template>
-        </el-dialog>
-
-        <el-drawer
+        <TreeDetailDrawer
             v-model="treeDetailOpen"
-            direction="rtl"
-            size="520px"
-            class="info-detail-drawer"
-            append-to-body
-            :with-header="false"
+            :form-data="treeDetailForm"
+            :get-status-type="getTreeDetailStatusType"
+            :get-status-text="getTreeDetailStatusText"
+            :get-info-type-label="getTreeInfoTypeLabel"
+            :format-start-time="formatTreeStartTime"
             @closed="resetTreeDetailForm"
-        >
-            <div class="detail-drawer">
-                <div class="detail-drawer__header">
-                    <div class="detail-drawer__title-row">
-                        <h3 class="detail-drawer__title">详情信息</h3>
-                        <el-tag class="detail-status-tag" :type="getTreeDetailStatusType()" effect="dark">
-                            {{ getTreeDetailStatusText() }}
-                        </el-tag>
-                    </div>
-                    <p class="detail-drawer__id">编号：{{ treeDetailForm.id || '--' }}</p>
-                </div>
+        />
 
-                <transition name="drawer-content-fade" appear>
-                    <div v-if="treeDetailOpen" class="detail-drawer__body">
-                        <el-card class="detail-card" shadow="hover">
-                            <template #header>
-                                <div class="detail-card__header">基础信息</div>
-                            </template>
-                            <div class="detail-grid">
-                                <div class="detail-item">
-                                    <span class="detail-label">名称</span>
-                                    <span class="detail-value">{{ treeDetailForm.name || '--' }}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">类型</span>
-                                    <span class="detail-value">{{ getTreeInfoTypeLabel(treeDetailForm.type) }}</span>
-                                </div>
-                                <div class="detail-item" v-if="treeDetailForm.targetType">
-                                    <span class="detail-label">目标</span>
-                                    <span class="detail-value">{{ treeDetailForm.targetType }}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">地点</span>
-                                    <span class="detail-value">{{ treeDetailForm.location || '--' }}</span>
-                                </div>
-                            </div>
-                        </el-card>
-
-                        <el-card class="detail-card" shadow="hover">
-                            <template #header>
-                                <div class="detail-card__header">时间与人员</div>
-                            </template>
-                            <div class="detail-grid">
-                                <div class="detail-item">
-                                    <span class="detail-label">时间</span>
-                                    <span class="detail-value">{{ formatTreeStartTime(treeDetailForm.startTime) || '--' }}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">创建时间</span>
-                                    <span class="detail-value">{{ treeDetailForm.createTime || '--' }}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <span class="detail-label">创建人</span>
-                                    <span class="detail-value">{{ treeDetailForm.createBy || '暂无创建人' }}</span>
-                                </div>
-                            </div>
-                        </el-card>
-
-                        <el-card class="detail-card" shadow="hover">
-                            <template #header>
-                                <div class="detail-card__header">附加信息</div>
-                            </template>
-                            <div class="detail-stack">
-                                <div class="detail-item detail-item--column">
-                                    <span class="detail-label">路径</span>
-                                    <span class="detail-value">{{ treeDetailForm.fullPath || '--' }}</span>
-                                </div>
-                                <div class="detail-item detail-item--column">
-                                    <span class="detail-label">内容描述</span>
-                                    <span class="detail-value">{{ treeDetailForm.contentDesc || '--' }}</span>
-                                </div>
-                            </div>
-                        </el-card>
-                    </div>
-                </transition>
-
-                <div class="detail-drawer__footer">
-                    <el-button @click="treeDetailOpen = false">关 闭</el-button>
-                </div>
-            </div>
-        </el-drawer>
-
-        <el-drawer
+        <TreeEditDrawer
             v-model="treeEditOpen"
-            direction="rtl"
-            size="560px"
-            class="info-edit-drawer"
-            append-to-body
-            :with-header="false"
+            :title="treeEditTitle"
+            :loading="treeSubmitLoading"
+            :form-model="treeEditForm"
+            :rules="infoRules"
+            :project-options="projectOptions"
+            :target-type-options="targetTypeOptions"
+            :get-info-type-label="getTreeInfoTypeLabel"
+            :format-create-time="formatTreeCreateTime"
+            @submit="submitTreeEdit"
             @closed="resetTreeEditForm"
-        >
-            <div class="drawer-form-shell">
-                <div class="drawer-form-shell__header">
-                    <div>
-                        <h3 class="drawer-form-shell__title">{{ treeEditTitle }}</h3>
-                        <p class="drawer-form-shell__subtitle">修改{{ getTreeInfoTypeLabel(treeEditForm.type) }}信息</p>
-                    </div>
-                </div>
+        />
 
-                <div class="drawer-form-shell__body">
-                    <el-form ref="treeEditFormRef" :model="treeEditForm" :rules="infoRules" label-width="84px" class="ant-form-layout">
-                        <el-form-item label="名称" prop="name">
-                            <el-input v-model="treeEditForm.name" placeholder="请输入名称" />
-                            <template #error="{ error }">
-                                <transition name="form-error-slide">
-                                    <div v-if="error" class="form-error-tip">{{ error }}</div>
-                                </transition>
-                            </template>
-                        </el-form-item>
-                        <el-form-item label="所属项目" prop="parentId" v-if="treeEditForm.type === 'experiment'">
-                            <el-select v-model="treeEditForm.parentId" placeholder="请选择所属项目" filterable clearable>
-                                <el-option
-                                    v-for="item in projectOptions"
-                                    :key="item.projectId"
-                                    :label="item.projectName"
-                                    :value="item.projectId"
-                                />
-                            </el-select>
-                            <template #error="{ error }">
-                                <transition name="form-error-slide">
-                                    <div v-if="error" class="form-error-tip">{{ error }}</div>
-                                </transition>
-                            </template>
-                        </el-form-item>
-                        <el-form-item label="试验目标" prop="targetId" v-if="treeEditForm.type === 'experiment'">
-                            <el-select v-model="treeEditForm.targetId" placeholder="请选择试验目标">
-                                <el-option
-                                    v-for="item in targetTypeOptions"
-                                    :key="item.targetId"
-                                    :label="item.targetType"
-                                    :value="item.targetId"
-                                />
-                            </el-select>
-                            <template #error="{ error }">
-                                <transition name="form-error-slide">
-                                    <div v-if="error" class="form-error-tip">{{ error }}</div>
-                                </transition>
-                            </template>
-                        </el-form-item>
-                        <el-form-item label="试验日期" prop="startTime" v-if="treeEditForm.type === 'experiment'">
-                            <el-date-picker
-                                v-model="treeEditForm.startTime"
-                                type="date"
-                                value-format="YYYY-MM-DD"
-                                placeholder="选择开始日期"
-                                clearable
-                            />
-                            <template #error="{ error }">
-                                <transition name="form-error-slide">
-                                    <div v-if="error" class="form-error-tip">{{ error }}</div>
-                                </transition>
-                            </template>
-                        </el-form-item>
-                        <el-form-item label="试验地点" prop="location" v-if="treeEditForm.type === 'experiment'">
-                            <el-input v-model="treeEditForm.location" placeholder="请输入地点" />
-                            <template #error="{ error }">
-                                <transition name="form-error-slide">
-                                    <div v-if="error" class="form-error-tip">{{ error }}</div>
-                                </transition>
-                            </template>
-                        </el-form-item>
-                        <el-form-item label="内容描述" prop="contentDesc">
-                            <el-input
-                                v-model="treeEditForm.contentDesc"
-                                type="textarea"
-                                :maxlength="200"
-                                show-word-limit
-                                :autosize="{ minRows: 4, maxRows: 6 }"
-                                placeholder="请输入内容"
-                            />
-                            <template #error="{ error }">
-                                <transition name="form-error-slide">
-                                    <div v-if="error" class="form-error-tip">{{ error }}</div>
-                                </transition>
-                            </template>
-                        </el-form-item>
-                        <el-form-item label="路径" prop="fullPath">
-                            <el-input v-model="treeEditForm.fullPath" placeholder="请输入路径" disabled/>
-                        </el-form-item>
-                        <el-form-item label="创建人" v-if="treeEditForm.createBy">
-                            <el-input :model-value="treeEditForm.createBy" disabled />
-                        </el-form-item>
-                        <el-form-item label="创建时间" v-if="treeEditForm.createTime">
-                            <el-input :model-value="formatTreeCreateTime(treeEditForm.createTime)" disabled />
-                        </el-form-item>
-                    </el-form>
-                </div>
-
-                <div class="drawer-form-shell__footer">
-                    <el-button type="primary" class="ant-confirm-btn" :loading="treeSubmitLoading" @click="submitTreeEdit">保 存</el-button>
-                    <el-button class="ant-cancel-btn" :disabled="treeSubmitLoading" @click="treeEditOpen = false">取 消</el-button>
-                </div>
-            </div>
-        </el-drawer>
-
-         <!-- 添加或修改数据对话框 -->
-        <el-dialog :title="title" v-model="open" width="700px" append-to-body>
-            <el-form ref="dataRef" :model="form" :rules="rules" label-width="100px">
-                <!-- 可编辑字段 -->
-                <el-row>
-                    <el-col :span="12">
-                        <el-form-item label="数据名称" prop="dataName">
-                            <el-input v-model="form.dataName" placeholder="请输入数据名称" />
-                        </el-form-item>
-                    </el-col>
-                    <el-col :span="12">
-                        <el-form-item label="是否模拟" prop="isSimulation">
-                            <el-select v-model="form.isSimulation" placeholder="请选择">
-                                <el-option label="真实" :value="true" />
-                                <el-option label="模拟" :value="false" />
-                            </el-select>
-                        </el-form-item>
-                    </el-col>
-                </el-row>
-                <el-row>
-                    <el-col :span="12">
-                        <el-form-item label="数据种类" prop="dataType">
-                            <el-select v-model="form.dataType" placeholder="请选择数据种类">
-                                <el-option label="ADS-B目标元数据" value="ADS-B目标元数据" />
-                                <el-option label="AIS目标元数据" value="AIS目标元数据" />
-                                <el-option label="通信情报日志元数据" value="通信情报日志元数据" />
-                                <el-option label="交战闭锁元数据" value="交战闭锁元数据" />
-                                <el-option label="电子战截获元数据" value="电子战截获元数据" />
-                                <el-option label="载机姿态元数据" value="载机姿态元数据" />
-                                <el-option label="惯导状态元数据" value="惯导状态元数据" />
-                                <el-option label="被动探测元数据" value="被动探测元数据"/>
-                                <el-option label="雷达系统航迹元数据" value="雷达系统航迹元数据"/>
-                                <el-option label="目标牵引询问元数据" value="目标牵引询问元数据"/>
-                                <el-option label="其他元数据" value="其他元数据"/>
-                            </el-select>
-                        </el-form-item>
-                    </el-col>
-                    <el-col :span="12">
-                        <el-form-item label="文件名称" prop="fileName" v-if="title === '修改数据'">
-                            <el-input v-model="form.fileName" placeholder="请输入文件名称" />
-                        </el-form-item>
-                    </el-col>
-                </el-row>
-                <el-row v-if="title === '修改数据'">
-                    <el-col :span="24">
-                        <el-form-item label="修改目录">
-                            <el-tree-select
-                                v-model="selectedMovePathNodeId"
-                                :data="movePathTreeOptions"
-                                :props="{ label: 'label', children: 'children', disabled: 'disabled' }"
-                                value-key="id"
-                                placeholder="请选择修改的目标文件目录"
-                                check-strictly
-                                clearable
-                                filterable
-                                @change="handleMovePathChange"
-                            />
-                        </el-form-item>
-                    </el-col>
-                </el-row>
-
-                <!-- 只读字段 -->
-                <el-divider />
-                <el-row>
-                    <el-col :span="12">
-                        <el-form-item label="ID">
-                            <el-input :value="form.id" disabled />
-                        </el-form-item>
-                    </el-col>
-                    <el-col :span="12">
-                        <el-form-item label="所属试验">
-                            <el-input :value="moveTargetExperimentName || form.experimentName" disabled />
-                        </el-form-item>
-                    </el-col>
-                </el-row>
-                <el-row>
-                    <el-col :span="12">
-                        <el-form-item label="所属项目">
-                            <el-input :value="moveTargetProjectName || form.projectName" disabled />
-                        </el-form-item>
-                    </el-col>
-                    <el-col :span="12">
-                        <el-form-item label="试验目标">
-                            <el-input :value="form.targetType" disabled />
-                        </el-form-item>
-                    </el-col>
-                </el-row>
-                <el-row>
-                    <el-col :span="24">
-                        <el-form-item label="当前路径">
-                            <el-input :value="form.fullPath" disabled />
-                        </el-form-item>
-                    </el-col>
-                </el-row>
-                <el-row>
-                    <el-col :span="12">
-                        <el-form-item label="试验时间">
-                            <el-input :value="parseTime(form.startTime)" disabled />
-                        </el-form-item>
-                    </el-col>
-                    <el-col :span="12">
-                        <el-form-item label="试验地点">
-                            <el-input :value="form.location" disabled />
-                        </el-form-item>
-                    </el-col>
-                </el-row>
-                <el-row>
-                    <el-col :span="24">
-                        <el-form-item label="内容描述">
-                            <el-input :value="form.contentDesc" type="textarea" disabled />
-                        </el-form-item>
-                    </el-col>
-                </el-row>
-                <el-row>
-                    <el-col :span="12">
-                        <el-form-item label="创建人">
-                            <el-input :value="form.createBy" disabled />
-                        </el-form-item>
-                    </el-col>
-                    <el-col :span="12">
-                        <el-form-item label="创建时间">
-                            <el-input :value="parseTime(form.createTime)" disabled />
-                        </el-form-item>
-                    </el-col>
-                </el-row>
-            </el-form>
-            <template #footer>
-                <div class="dialog-footer">
-                    <el-button type="primary" @click="submitForm">确 定</el-button>
-                    <el-button @click="cancel">取 消</el-button>
-                </div>
-            </template>
-        </el-dialog>
+        <DataEditDialog
+            v-model="open"
+            :title="title"
+            :form-model="form"
+            :rules="rules"
+            :move-path-tree-options="movePathTreeOptions"
+            :selected-move-path-node-id="selectedMovePathNodeId"
+            :move-target-experiment-name="moveTargetExperimentName"
+            :move-target-project-name="moveTargetProjectName"
+            :format-time="formatListTime"
+            @update:selected-move-path-node-id="selectedMovePathNodeId = $event"
+            @move-path-change="handleMovePathChange"
+            @submit="submitForm"
+            @closed="cancel"
+        />
 
         <!-- 详情对话框 -->
         <el-dialog title="数据详情" v-model="openView" width="700px" append-to-body>
@@ -927,141 +223,26 @@
             </template>
         </el-dialog>
 
-        <!-- 文件管理器 (数据导入) 对话框 -->
-        <el-dialog v-model="importVisible" title="数据导入" width="60%" append-to-body @closed="resetUploadData" class="import-dialog">
-            <div class="import-dialog-body">
-                <!-- 数据信息表单 -->
-                <el-form ref="uploadDataFormRef" :model="uploadDataForm" :rules="uploadDataRules" label-width="100px" class="import-form">
-                    <el-row>
-                        <el-col :span="12">
-                            <el-form-item label="数据名称" prop="dataName">
-                                <el-input
-                                    v-model="uploadDataForm.dataName"
-                                    :disabled="businessDraftFiles.length > 0 && !businessSingleUploadNameEnabled"
-                                    :placeholder="businessDraftFiles.length === 0 || businessSingleUploadNameEnabled ? '为空则使用文件名' : '批量、文件夹或 ZIP 上传时按实际文件名入库'"
-                                />
-                            </el-form-item>
-                        </el-col>
-                        <el-col :span="12">
-                            <el-form-item label="所属试验" prop="experimentId">
-                                <el-tree-select
-                                    v-model="uploadDataForm.experimentId"
-                                    :data="selectableTreeOptions"
-                                    :props="{ label: 'label', children: 'children', disabled: 'disabled' }"
-                                    value-key="id"
-                                    placeholder="请选择所属试验"
-                                    check-strictly
-                                    filterable
-                                />
-                            </el-form-item>
-                        </el-col>
-                    </el-row>
-                    <el-row>
-                        <el-col :span="12">
-                            <el-form-item label="试验目标" prop="targetId">
-                                <el-select v-model="uploadDataForm.targetId" placeholder="请选择试验目标" @change="handleTargetChange">
-                                    <el-option v-for="item in targetTypeOptions" :key="item.targetId" :label="item.targetType" :value="item.targetId" />
-                                </el-select>
-                            </el-form-item>
-                        </el-col>
-                        <el-col :span="12">
-                            <el-form-item label="数据种类" prop="dataType">
-                                <el-select v-model="uploadDataForm.dataType" placeholder="请选择数据种类">
-                                    <el-option label="载机惯导数据" value="载机惯导数据" />
-                                    <el-option label="载机姿态数据" value="载机姿态数据" />
-                                    <el-option label="雷达航迹数据" value="雷达航迹数据" />
-                                    <el-option label="电子战数据" value="电子战数据" />
-                                    <el-option label="通侦数据" value="通侦数据" />
-                                    <el-option label="ADS-B数据" value="ADS-B数据" />
-                                    <el-option label="AIS数据" value="AIS数据" />
-                                    <el-option label="目标牵引与询问数据" value="目标牵引与询问数据"/>
-                                    <el-option label="方位数据" value="方位数据"/>
-                                    <el-option label="闭锁信息数据" value="闭锁信息数据"/>
-                                    <el-option label="其他元数据" value="其他元数据"/>
-                                </el-select>
-                            </el-form-item>
-                        </el-col>
-                    </el-row>
-                    <el-row>
-                        <el-col :span="12">
-                            <el-form-item label="是否模拟" prop="isSimulation">
-                                <el-radio-group v-model="uploadDataForm.isSimulation">
-                                    <el-radio :label="true">真实</el-radio>
-                                    <el-radio :label="false">模拟</el-radio>
-                                </el-radio-group>
-                            </el-form-item>
-                        </el-col>
-                    </el-row>
-                </el-form>
-
-                <el-divider content-position="left">导入文件上传</el-divider>
-                <el-alert
-                    title="支持上传单个文件、多个文件、文件夹和 ZIP 压缩包；文件夹结构会保留，ZIP 会自动解压到当前试验目录。批量、文件夹和 ZIP 解压场景下将按实际文件名入库。"
-                    type="info"
-                    :closable="false"
-                    show-icon
-                    class="experiment-upload__alert"
-                />
-                <el-upload
-                    ref="businessUploadRef"
-                    drag
-                    action=""
-                    :auto-upload="false"
-                    :show-file-list="false"
-                    multiple
-                    :disabled="fileLoading"
-                    :accept="EXPERIMENT_UPLOAD_ACCEPT"
-                    class="experiment-upload"
-                    :on-change="handleBusinessDraftChange"
-                >
-                    <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-                    <div class="el-upload__text">拖拽导入文件到此处，或<em>点击选择文件</em></div>
-                    <template #tip>
-                        <div class="experiment-upload__tip">支持 ZIP、CSV、Excel、TXT、JSON、Word、PDF、BIN、DAT、RAW、PNG、JPG、JPEG、MP3、MP4；如需上传整个文件夹，请使用下方“选择文件夹”。</div>
-                    </template>
-                </el-upload>
-                <input
-                    ref="businessFolderInputRef"
-                    class="experiment-upload__folder-input"
-                    type="file"
-                    webkitdirectory
-                    multiple
-                    :disabled="fileLoading"
-                    :accept="EXPERIMENT_UPLOAD_ACCEPT"
-                    @change="handleBusinessFolderChange"
-                />
-                <div class="experiment-upload__meta">
-                    <span class="experiment-upload__count">已选择 {{ businessDraftFiles.length }} 个待上传文件</span>
-                    <div class="experiment-upload__actions">
-                        <el-button link type="primary" :disabled="fileLoading" @click="openBusinessFolderPicker">
-                            <el-icon><ElIconFolder /></el-icon>
-                            <span>选择文件夹</span>
-                        </el-button>
-                        <el-button link type="primary" :disabled="!businessDraftFiles.length || fileLoading" @click="clearBusinessDraftFiles">清空文件</el-button>
-                    </div>
-                </div>
-                <div v-if="businessUploadProgress.visible" class="experiment-upload__progress">
-                    <div class="experiment-upload__progress-text">{{ businessUploadProgress.text }}</div>
-                    <el-progress :percentage="businessUploadProgress.percentage" :status="businessUploadProgress.status" :stroke-width="10" />
-                </div>
-                <div v-if="businessDraftFiles.length" class="experiment-upload__list">
-                    <div v-for="file in businessDraftFiles" :key="file.uid" class="experiment-upload__list-item">
-                        <div class="experiment-upload__list-main">
-                            <el-icon class="experiment-upload__list-icon"><ElIconDocument /></el-icon>
-                            <span class="experiment-upload__list-name" :title="file.name">{{ file.name }}</span>
-                        </div>
-                        <div class="experiment-upload__list-side">
-                            <span class="experiment-upload__list-size">{{ formatExperimentFileSize(file.size) }}</span>
-                            <el-button link type="danger" :disabled="fileLoading" @click="removeBusinessDraftFile(file.uid)">移除</el-button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <template #footer>
-                <el-button @click="cancelUpload">取消</el-button>
-                <el-button type="primary" @click="submitUpload" :loading="fileLoading">导入数据</el-button>
-            </template>
-        </el-dialog>
+        <DataImportDialog
+            v-model="importVisible"
+            :loading="fileLoading"
+            :form-model="uploadDataForm"
+            :rules="uploadDataRules"
+            :selectable-tree-options="selectableTreeOptions"
+            :target-type-options="targetTypeOptions"
+            :draft-files="businessDraftFiles"
+            :progress="businessUploadProgress"
+            :accept="EXPERIMENT_UPLOAD_ACCEPT"
+            :single-upload-name-enabled="businessSingleUploadNameEnabled"
+            :format-size="formatExperimentFileSize"
+            @submit="submitUpload"
+            @closed="resetUploadData"
+            @target-change="handleTargetChange"
+            @draft-change="handleBusinessDraftChange"
+            @folder-change="handleBusinessFolderChange"
+            @clear-files="clearBusinessDraftFiles"
+            @remove-file="removeBusinessDraftFile"
+        />
 
         <!-- 业务数据详情 (文件预览) 对话框 -->
         <el-dialog
@@ -1359,14 +540,11 @@
     </div>
 </template>
 <script setup name="Business">
-import {getdataList,getdataDetail,getMovePathTree,updatedata,deldata,adddata,previewData,downloadData,RenameDataName} from '@/api/data/bussiness'
+import {getdataList,getdataDetail,getMovePathTree,updatedata,deldata,adddata,previewData,downloadData,RenameDataName,backupData,getBackupDataList} from '@/api/data/bussiness'
 import { getExperimentTree, addProjectInfo, addExperimentInfo, getInfo, updateInfo, delInfo } from "@/api/data/info"
 import { addDateRange, blobValidate } from "@/utils/ruoyi"
 import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
 import {
-  UploadFilled,
-  Folder as ElIconFolder,
-  Document as ElIconDocument,
   MoreFilled,
   View as ViewIcon,
   Edit as EditIcon,
@@ -1377,6 +555,16 @@ import {
   Close as CloseIcon
 } from '@element-plus/icons-vue'
 import { saveAs } from 'file-saver'
+import DataQueryPanel from './components/DataQueryPanel.vue'
+import DataTablePanel from './components/DataTablePanel.vue'
+import ComparePreviewDialog from './components/ComparePreviewDialog.vue'
+import ProjectInfoDialog from './components/ProjectInfoDialog.vue'
+import ExperimentInfoDialog from './components/ExperimentInfoDialog.vue'
+import TreeDetailDrawer from './components/TreeDetailDrawer.vue'
+import TreeEditDrawer from './components/TreeEditDrawer.vue'
+import DataEditDialog from './components/DataEditDialog.vue'
+import DataImportDialog from './components/DataImportDialog.vue'
+import BackupDataDialog from './components/BackupDataDialog.vue'
 const dateRange = ref([])
 const { proxy } = getCurrentInstance()
 const treeTableOptions = ref(undefined)
@@ -1393,9 +581,6 @@ const treeDetailOpen = ref(false)
 const treeEditOpen = ref(false)
 const treeSubmitLoading = ref(false)
 const treeEditTitle = ref("")
-const projectInfoFormRef = ref(null)
-const experimentInfoFormRef = ref(null)
-const treeEditFormRef = ref(null)
 
 const name = ref('')
 const loading = ref(false)
@@ -1409,12 +594,15 @@ const multiple = ref(true)
 const compareDialogVisible = ref(false)
 const comparePreviewItems = ref([])
 const COMPARE_PREVIEW_PAGE_SIZE = 20
+const backupDialogVisible = ref(false)
+const backupLoading = ref(false)
+const backupTotal = ref(0)
+const backupList = ref([])
+const backupDateRange = ref([])
 
 // 文件管理器相关状态
 const fileLoading = ref(false)
 const importVisible = ref(false)
-const businessUploadRef = ref(null)
-const businessFolderInputRef = ref(null)
 const businessDraftFiles = ref([])
 const businessUploadProgress = reactive({
   visible: false,
@@ -1422,8 +610,6 @@ const businessUploadProgress = reactive({
   status: '',
   text: ''
 })
-const experimentUploadRef = ref(null)
-const experimentFolderInputRef = ref(null)
 const experimentDraftFiles = ref([])
 const experimentUploadProgress = reactive({
   visible: false,
@@ -1432,7 +618,6 @@ const experimentUploadProgress = reactive({
   text: ''
 })
 const fileManagerPreviewFile = ref(null)
-const uploadDataFormRef = ref(null)
 const EXPERIMENT_UPLOAD_ACCEPT = '.zip,.csv,.xls,.xlsx,.txt,.json,.doc,.docx,.pdf,.bin,.dat,.raw,.png,.jpg,.jpeg,.mp3,.mp4'
 const experimentAllowedExtensions = new Set(['zip', 'csv', 'xls', 'xlsx', 'txt', 'json', 'doc', 'docx', 'pdf', 'bin', 'dat', 'raw','png','jpg','jpeg','mp3','mp4'])
 let experimentDraftUid = 0
@@ -1610,6 +795,16 @@ const uploadDataForm = reactive({
   dataType: '',
   isSimulation: true
 })
+const createBackupQueryParams = () => ({
+  pageNum: 1,
+  pageSize: 10,
+  dataName: undefined,
+  experimentName: undefined,
+  projectName: undefined,
+  deleteBy: undefined,
+  isRestored: undefined
+})
+const backupQueryParams = reactive(createBackupQueryParams())
 const uploadDataRules = {
   experimentId: [{ required: true, message: "请选择试验", trigger: "change" }],
   targetId: [{ required: true, message: "请选择试验目标", trigger: "change" }],
@@ -1722,19 +917,76 @@ async function handleCompareData() {
   await Promise.allSettled(comparePreviewItems.value.map(item => loadComparePreviewItem(item)))
 }
 
+function handleRestoreData() {
+  backupDialogVisible.value = true
+  getBackupList()
+}
+
+function handleBackupQuery() {
+  backupQueryParams.pageNum = 1
+  getBackupList()
+}
+
+function resetBackupQuery() {
+  Object.assign(backupQueryParams, createBackupQueryParams())
+  backupDateRange.value = []
+  getBackupList()
+}
+
+function getBackupList() {
+  backupLoading.value = true
+  const query = addDateRange({ ...backupQueryParams }, backupDateRange.value)
+  return getBackupDataList(query, { silent: true }).then(response => {
+    backupList.value = response.rows || (response.data && response.data.rows) || []
+    backupTotal.value = response.total || (response.data && response.data.total) || 0
+  }).catch(error => {
+    ElMessage.error(error?.message || '查询备份数据失败')
+  }).finally(() => {
+    backupLoading.value = false
+  })
+}
+
+async function handleBackupData(row) {
+  const dataId = row?.id
+  if (!dataId) {
+    ElMessage.warning('未获取到要备份的数据')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(`确认备份数据“${row.dataName || dataId}”吗？`, '备份确认', {
+      type: 'warning',
+      confirmButtonText: '确认备份',
+      cancelButtonText: '取消'
+    })
+  } catch (error) {
+    return
+  }
+
+  try {
+    const response = await backupData(dataId, { silent: true })
+    if (response?.code === 200) {
+      proxy.$modal.msgSuccess(response?.msg || '备份成功')
+      if (backupDialogVisible.value) {
+        getBackupList()
+      }
+      return
+    }
+
+    ElMessage.error(response?.msg || '备份失败')
+  } catch (error) {
+    const errorMessage = error?.message || error?.response?.data?.msg || '备份失败'
+    ElMessage.error(errorMessage)
+  }
+}
+
 function resetProjectInfoForm() {
   Object.assign(projectInfoForm, createProjectInfoForm())
-  if (projectInfoFormRef.value) {
-    projectInfoFormRef.value.clearValidate()
-  }
 }
 
 function resetExperimentInfoForm() {
   Object.assign(experimentInfoForm, createExperimentInfoForm())
   clearExperimentDraftFiles()
-  if (experimentInfoFormRef.value) {
-    experimentInfoFormRef.value.clearValidate()
-  }
 }
 
 function resetTreeDetailForm() {
@@ -1743,9 +995,6 @@ function resetTreeDetailForm() {
 
 function resetTreeEditForm() {
   Object.assign(treeEditForm, createInfoForm())
-  if (treeEditFormRef.value) {
-    treeEditFormRef.value.clearValidate()
-  }
 }
 
 async function loadInfoDialogOptions() {
@@ -1783,31 +1032,13 @@ async function handleAddExperiment() {
   experimentInfoDialogOpen.value = true
 }
 
-function cancelProjectInfoDialog() {
-  projectInfoDialogOpen.value = false
-}
-
-function cancelExperimentInfoDialog() {
-  experimentInfoDialogOpen.value = false
-}
-
 function clearExperimentDraftFiles() {
   experimentDraftFiles.value = []
   resetExperimentUploadProgress()
-  if (experimentUploadRef.value) {
-    experimentUploadRef.value.clearFiles()
-  }
-  resetExperimentFolderInput()
 }
 
 function removeExperimentDraftFile(uid) {
   experimentDraftFiles.value = experimentDraftFiles.value.filter(item => item.uid !== uid)
-}
-
-function resetExperimentFolderInput() {
-  if (experimentFolderInputRef.value) {
-    experimentFolderInputRef.value.value = ''
-  }
 }
 
 function resetExperimentUploadProgress() {
@@ -1924,15 +1155,9 @@ function handleExperimentDraftChange(uploadFile) {
   addExperimentDraftFiles([uploadFile.raw])
 }
 
-function openExperimentFolderPicker() {
-  if (experimentInfoSubmitLoading.value) return
-  experimentFolderInputRef.value?.click()
-}
-
 function handleExperimentFolderChange(event) {
   const rawFiles = Array.from(event?.target?.files || [])
   addExperimentDraftFiles(rawFiles)
-  resetExperimentFolderInput()
 }
 
 function formatExperimentFileSize(size) {
@@ -1946,20 +1171,10 @@ function formatExperimentFileSize(size) {
 function clearBusinessDraftFiles() {
   businessDraftFiles.value = []
   resetBusinessUploadProgress()
-  if (businessUploadRef.value) {
-    businessUploadRef.value.clearFiles()
-  }
-  resetBusinessFolderInput()
 }
 
 function removeBusinessDraftFile(uid) {
   businessDraftFiles.value = businessDraftFiles.value.filter(item => item.uid !== uid)
-}
-
-function resetBusinessFolderInput() {
-  if (businessFolderInputRef.value) {
-    businessFolderInputRef.value.value = ''
-  }
 }
 
 function resetBusinessUploadProgress() {
@@ -2034,15 +1249,9 @@ function handleBusinessDraftChange(uploadFile) {
   addBusinessDraftFiles([uploadFile.raw])
 }
 
-function openBusinessFolderPicker() {
-  if (fileLoading.value) return
-  businessFolderInputRef.value?.click()
-}
-
 function handleBusinessFolderChange(event) {
   const rawFiles = Array.from(event?.target?.files || [])
   addBusinessDraftFiles(rawFiles)
-  resetBusinessFolderInput()
 }
 
 function buildExperimentInfoFormData(data) {
@@ -2133,6 +1342,18 @@ function formatTreeStartTime(time) {
 }
 
 function formatTreeCreateTime(time) {
+  if (!time) return ''
+  if (typeof time === 'string' && /^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$/.test(time.trim())) {
+    return time
+  }
+  try {
+    return proxy.parseTime(time)
+  } catch (error) {
+    return String(time)
+  }
+}
+
+function formatListTime(time) {
   if (!time) return ''
   if (typeof time === 'string' && /^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$/.test(time.trim())) {
     return time
@@ -2249,11 +1470,10 @@ function handleTreeAction(command, row) {
 }
 
 function submitTreeEdit() {
-  if (treeSubmitLoading.value || !treeEditFormRef.value) return
-  treeEditFormRef.value.validate(async valid => {
-    if (!valid) return
+  if (treeSubmitLoading.value) return
 
-    treeSubmitLoading.value = true
+  treeSubmitLoading.value = true
+  ;(async () => {
     try {
       const submitData = JSON.parse(JSON.stringify(treeEditForm))
       submitData.startTime = formatDateForSubmit(submitData.startTime)
@@ -2275,15 +1495,14 @@ function submitTreeEdit() {
     } finally {
       treeSubmitLoading.value = false
     }
-  })
+  })()
 }
 
 function submitProjectInfoForm() {
-  if (projectInfoSubmitLoading.value || !projectInfoFormRef.value) return
-  projectInfoFormRef.value.validate(async valid => {
-    if (!valid) return
+  if (projectInfoSubmitLoading.value) return
 
-    projectInfoSubmitLoading.value = true
+  projectInfoSubmitLoading.value = true
+  ;(async () => {
     try {
       const submitData = JSON.parse(JSON.stringify(projectInfoForm))
       submitData.type = 'project'
@@ -2301,22 +1520,21 @@ function submitProjectInfoForm() {
     } finally {
       projectInfoSubmitLoading.value = false
     }
-  })
+  })()
 }
 
 function submitExperimentInfoForm() {
-  if (experimentInfoSubmitLoading.value || !experimentInfoFormRef.value) return
-  experimentInfoFormRef.value.validate(async valid => {
-    if (!valid) return
+  if (experimentInfoSubmitLoading.value) return
 
-    experimentInfoSubmitLoading.value = true
-    const uploadCount = experimentDraftFiles.value.length
-    resetExperimentUploadProgress()
-    if (uploadCount > 0) {
-      experimentUploadProgress.visible = true
-      experimentUploadProgress.text = `准备上传 ${uploadCount} 个文件...`
-    }
+  experimentInfoSubmitLoading.value = true
+  const uploadCount = experimentDraftFiles.value.length
+  resetExperimentUploadProgress()
+  if (uploadCount > 0) {
+    experimentUploadProgress.visible = true
+    experimentUploadProgress.text = `准备上传 ${uploadCount} 个文件...`
+  }
 
+  ;(async () => {
     try {
       const submitData = JSON.parse(JSON.stringify(experimentInfoForm))
       submitData.type = 'experiment'
@@ -2347,7 +1565,7 @@ function submitExperimentInfoForm() {
     } finally {
       experimentInfoSubmitLoading.value = false
     }
-  })
+  })()
 }
 
 function normalizeRelativePath(path) {
@@ -3085,9 +2303,6 @@ const resetUploadData = () => {
   uploadDataForm.isSimulation = true
   clearBusinessDraftFiles()
   fileLoading.value = false
-  if (uploadDataFormRef.value) {
-    uploadDataFormRef.value.resetFields()
-  }
 }
 
 /** 处理试验目标选择变化 - 获取对应的 targetType */
@@ -3101,50 +2316,47 @@ const cancelUpload = () => {
   importVisible.value = false
 }
 const submitUpload = async () => {
-  if (fileLoading.value || !uploadDataFormRef.value) return
-  await uploadDataFormRef.value.validate(async (valid) => {
-    if (!valid) return
+  if (fileLoading.value) return
 
-    const selectedFiles = businessDraftFiles.value.filter(file => file?.raw)
-    if (selectedFiles.length === 0) {
-        ElMessage.warning('请选择要上传的文件')
-        return
+  const selectedFiles = businessDraftFiles.value.filter(file => file?.raw)
+  if (selectedFiles.length === 0) {
+    ElMessage.warning('请选择要上传的文件')
+    return
+  }
+
+  fileLoading.value = true
+  resetBusinessUploadProgress()
+  businessUploadProgress.visible = true
+  businessUploadProgress.text = `准备上传 ${selectedFiles.length} 个文件...`
+  try {
+    const businessData = {
+      dataName: uploadDataForm.dataName,
+      experimentId: uploadDataForm.experimentId,
+      targetId: uploadDataForm.targetId,
+      targetType: uploadDataForm.targetType,
+      dataType: uploadDataForm.dataType,
+      isSimulation: uploadDataForm.isSimulation
     }
-
-    fileLoading.value = true
-    resetBusinessUploadProgress()
+    const formData = buildBusinessUploadFormData(businessData)
+    await adddata(formData, {
+      silent: true,
+      onUploadProgress: event => updateBusinessUploadProgress(event, selectedFiles.length)
+    })
     businessUploadProgress.visible = true
-    businessUploadProgress.text = `准备上传 ${selectedFiles.length} 个文件...`
-    try {
-        const businessData = {
-          dataName: uploadDataForm.dataName,
-          experimentId: uploadDataForm.experimentId,
-          targetId: uploadDataForm.targetId,
-          targetType: uploadDataForm.targetType,
-          dataType: uploadDataForm.dataType,
-          isSimulation: uploadDataForm.isSimulation
-        }
-        const formData = buildBusinessUploadFormData(businessData)
-        await adddata(formData, {
-          silent: true,
-          onUploadProgress: event => updateBusinessUploadProgress(event, selectedFiles.length)
-        })
-        businessUploadProgress.visible = true
-        businessUploadProgress.percentage = 100
-        businessUploadProgress.status = 'success'
-        businessUploadProgress.text = `上传完成，已处理 ${selectedFiles.length} 个文件`
-        proxy.$modal.msgSuccess(selectedFiles.length > 1 ? `成功导入 ${selectedFiles.length} 个文件` : '数据导入成功')
-        importVisible.value = false
-        await getList()
-    } catch (error) {
-        businessUploadProgress.visible = true
-        businessUploadProgress.status = 'exception'
-        businessUploadProgress.text = error?.message || '上传失败，请重试'
-        showInfoRequestError(error, '数据导入失败')
-    } finally {
-        fileLoading.value = false
-    }
-  })
+    businessUploadProgress.percentage = 100
+    businessUploadProgress.status = 'success'
+    businessUploadProgress.text = `上传完成，已处理 ${selectedFiles.length} 个文件`
+    proxy.$modal.msgSuccess(selectedFiles.length > 1 ? `成功导入 ${selectedFiles.length} 个文件` : '数据导入成功')
+    importVisible.value = false
+    await getList()
+  } catch (error) {
+    businessUploadProgress.visible = true
+    businessUploadProgress.status = 'exception'
+    businessUploadProgress.text = error?.message || '上传失败，请重试'
+    showInfoRequestError(error, '数据导入失败')
+  } finally {
+    fileLoading.value = false
+  }
 }
 
 /** 下载详情中的文件 */
@@ -3228,7 +2440,6 @@ function handleNodeClick(data) {
 }
 
 function resetQuery() {
-    proxy.resetForm("queryRef")
     dateRange.value = []
     queryParams.value = {
         id: null,
@@ -3271,7 +2482,6 @@ function reset() {
   selectedMovePathNodeId.value = null
   selectedMovePathNode.value = null
   currentFileSuffix.value = ''
-  proxy.resetForm("dataRef")
 }
 
 /** 多选框选中数据 */
@@ -3316,34 +2526,30 @@ async function handleUpdate(row) {
 
 /** 提交按钮 */
 function submitForm() {
-  proxy.$refs["dataRef"].validate(valid => {
-    if (!valid) return
+  const submitData = { ...form.value }
+  const fileName = (submitData.fileName || '').trim()
+  if (!fileName) {
+    ElMessage.warning("文件名称不能为空")
+    return
+  }
 
-    const submitData = { ...form.value }
-    const fileName = (submitData.fileName || '').trim()
-    if (!fileName) {
-      ElMessage.warning("文件名称不能为空")
-      return
-    }
+  const suffix = currentFileSuffix.value || extractFileSuffix(submitData.dataFilePath || '')
+  let targetDir = extractDirPath(submitData.dataFilePath || '/')
 
-    const suffix = currentFileSuffix.value || extractFileSuffix(submitData.dataFilePath || '')
-    let targetDir = extractDirPath(submitData.dataFilePath || '/')
+  if (selectedMovePathNode.value && (selectedMovePathNode.value.type === 'dir' || selectedMovePathNode.value.type === 'experiment')) {
+    targetDir = selectedMovePathNode.value.relativePath
+    submitData.experimentId = selectedMovePathNode.value.experimentId
+  }
 
-    if (selectedMovePathNode.value && (selectedMovePathNode.value.type === 'dir' || selectedMovePathNode.value.type === 'experiment')) {
-      targetDir = selectedMovePathNode.value.relativePath
-      submitData.experimentId = selectedMovePathNode.value.experimentId
-    }
+  submitData.fileName = fileName
+  submitData.dataFilePath = buildRelativeDataFilePath(targetDir, fileName, suffix)
 
-    submitData.fileName = fileName
-    submitData.dataFilePath = buildRelativeDataFilePath(targetDir, fileName, suffix)
-
-    updatedata(submitData).then(() => {
-      proxy.$modal.msgSuccess("修改成功")
-      open.value = false
-      getList()
-    }).catch(error => {
-      console.error('修改失败: ' + (error.message || '未知错误'))
-    })
+  updatedata(submitData).then(() => {
+    proxy.$modal.msgSuccess("修改成功")
+    open.value = false
+    getList()
+  }).catch(error => {
+    console.error('修改失败: ' + (error.message || '未知错误'))
   })
 }
 

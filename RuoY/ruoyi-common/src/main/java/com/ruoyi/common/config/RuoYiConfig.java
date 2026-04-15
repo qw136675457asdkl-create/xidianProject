@@ -1,6 +1,5 @@
 package com.ruoyi.common.config;
 
-import org.apache.poi.hssf.record.BackupRecord;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -72,6 +71,14 @@ public class RuoYiConfig
     public static String getProfile()
     {
         return profile;
+    }
+
+    public static String getBackAndRestore(){
+        return backAndRestore;
+    }
+
+    public void setBackAndRestore(String backAndRestore){
+        RuoYiConfig.backAndRestore = backAndRestore;
     }
 
     public void setProfile(String profile)
@@ -146,9 +153,5 @@ public class RuoYiConfig
     public void setThresholdMb(double thresholdMb)
     {
         RuoYiConfig.thresholdMb = thresholdMb;
-    }
-
-    public static String getBackAndRestore(){
-        return backAndRestore;
     }
 }

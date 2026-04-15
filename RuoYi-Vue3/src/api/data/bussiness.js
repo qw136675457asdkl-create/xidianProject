@@ -32,6 +32,23 @@ export function RenameDataName(data) {
   })
 }
 
+export function backupData(id, config = {}) {
+  return request({
+    url: '/data/bussiness/backup/' + id,
+    method: 'put',
+    ...config
+  })
+}
+
+export function getBackupDataList(query, config = {}) {
+  return request({
+    url: '/data/bussiness/backup/list',
+    method: 'get',
+    params: query,
+    ...config
+  })
+}
+
 export function getMovePathTree() {
   return request({
     url: '/data/bussiness/movePathTree',

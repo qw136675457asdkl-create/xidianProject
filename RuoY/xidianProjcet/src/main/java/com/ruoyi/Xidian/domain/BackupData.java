@@ -63,7 +63,6 @@ public class BackupData extends BaseEntity {
     private Date deleteTime;
 
     /** 恢复人 */
-    @Excel(name = "恢复人")
     private String restoreBy;
 
     /** 恢复时间 */
@@ -73,8 +72,18 @@ public class BackupData extends BaseEntity {
     /** 是否恢复（0-未恢复，1-已恢复） */
     private Integer isRestored;
 
-    /** 删除前原始数据JSON快照，用于完整恢复 */
-    private String originalDataJson;
+    /** 采样频率 */
+    private Integer sampleFrequency;
+
+    /** 工作状态 */
+    private String workStatus;
+
+    /** 是否仿真 */
+    private Integer isSimulation;
+
+    /** 扩展属性 */
+    private String extAttr;
+
 
     /** 备注 */
     private String remark;
@@ -239,14 +248,6 @@ public class BackupData extends BaseEntity {
         return isRestored;
     }
 
-    public void setOriginalDataJson(String originalDataJson) {
-        this.originalDataJson = originalDataJson;
-    }
-
-    public String getOriginalDataJson() {
-        return originalDataJson;
-    }
-
     public void setRemark(String remark) {
         this.remark = remark;
     }
@@ -259,5 +260,37 @@ public class BackupData extends BaseEntity {
     }
     public Integer getRestoredDataInfoId(){
         return  restoredDataInfoId;
+    }
+
+    public void setSampleFrequency(Integer sampleFrequency) {
+        this.sampleFrequency = sampleFrequency;
+    }
+
+    public Integer getSampleFrequency() {
+        return sampleFrequency;
+    }
+
+    public void setWorkStatus(String workStatus) {
+        this.workStatus = workStatus;
+    }
+
+    public String getWorkStatus() {
+        return workStatus;
+    }
+
+    public void setIsSimulation(Integer isSimulation) {
+        this.isSimulation = isSimulation;
+    }
+
+    public Integer getIsSimulation() {
+        return isSimulation;
+    }
+
+    public void setExtAttr(String extAttr) {
+        this.extAttr = extAttr;
+    }
+
+    public String getExtAttr() {
+        return extAttr;
     }
 }

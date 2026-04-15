@@ -134,6 +134,31 @@
             </if>
         </where>
     </select>
+    <select id="selectDdataInfoById" resultMap="DdataInfoResultMap">
+        SELECT
+            d.id,
+            d.data_name,
+            d.data_type,
+            d.is_simulation,
+            d.data_file_path,
+            d.target_id,
+            d.target_type,
+            d.target_category,
+            d.sample_frequency,
+            d.work_status,
+            d.ext_attr,
+            d.create_time,
+            d.data_type,
+            d.create_by,
+            e.experiment_id,
+            e.experiment_name,
+            e.start_time,
+            e.location,
+            e.content_desc
+        FROM SYSTEM_COLLABORATION_TEST.md_data_relation d
+                 LEFT JOIN SYSTEM_COLLABORATION_TEST.d_experiment_info e ON d.experiment_id = e.experiment_id
+        WHERE d.id = #{id}
+    </select>
     <select id="selectSameNameFile" resultMap="DdataInfoResultMap">
         SELECT
         d.id,

@@ -1,5 +1,6 @@
 package com.ruoyi.Xidian.service;
 
+import com.ruoyi.Xidian.domain.BackupData;
 import com.ruoyi.Xidian.domain.DdataInfo;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -40,4 +41,8 @@ public interface IDdataService {
     }
 
     int renameDataName(List<DdataInfo> ddataInfo);
+
+    int backupDataById(Integer id);
+
+    List<BackupData> selectBackupDataList(BackupData backupData);
 }

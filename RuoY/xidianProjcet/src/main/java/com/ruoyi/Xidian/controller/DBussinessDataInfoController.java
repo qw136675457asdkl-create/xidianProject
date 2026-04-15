@@ -1,5 +1,6 @@
 package com.ruoyi.Xidian.controller;
 
+import com.ruoyi.Xidian.domain.BackupData;
 import com.ruoyi.Xidian.domain.DExperimentInfo;
 import com.ruoyi.Xidian.domain.DProjectInfo;
 import com.ruoyi.Xidian.domain.DdataInfo;
@@ -299,6 +300,37 @@ public class DBussinessDataInfoController extends BaseController
         }
     }
 
+    @PreAuthorize("@ss.hasPermi('dataInfo:info:backup')")
+    @PutMapping("/backup/{id}")
+    @Log(title = "备份数据文件" ,businessType = BusinessType.UPDATE)
+    public AjaxResult backupDdataInfoFile(@PathVariable Integer id){
+        if(id == null){
+            return AjaxResult.error("尚未选择数据");
+        }
+        if(ddataService.backupDataById(id)!=0){
+            return AjaxResult.success("备份成功");
+        }
+        return AjaxResult.error("备份失败");
+    }
+
+    //获取备份数据
+    @PreAuthorize("@ss.hasAnyPermi('dataInfo:info:backup,dataInfo:info:restore')")
+    @GetMapping("/backup/list")
+    public TableDataInfo getbackData(BackupData backupData){
+        startPage();
+        try {
+            return getDataTable(ddataService.selectBackupDataList(backupData));
+        } catch (Exception e) {
+            throw new ServiceException("查询备份数据列表失败");
+        }
+    }
+
+    //还原删除的数据
+    @PostMapping("/back/restore/{id}")
+    public AjaxResult restoreBackupData(@PathVariable Integer id){
+
+        return AjaxResult.success("恢复成功");
+    }
 
 
 

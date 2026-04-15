@@ -1,12 +1,10 @@
 package com.ruoyi.Xidian.service.impl;
 
+import com.ruoyi.Xidian.domain.BackupData;
 import com.ruoyi.Xidian.domain.DExperimentInfo;
 import com.ruoyi.Xidian.domain.DProjectInfo;
 import com.ruoyi.Xidian.domain.DdataInfo;
-import com.ruoyi.Xidian.mapper.DExperimentInfoMapper;
-import com.ruoyi.Xidian.mapper.DProjectInfoMapper;
-import com.ruoyi.Xidian.mapper.DTargetInfoMapper;
-import com.ruoyi.Xidian.mapper.DdataMapper;
+import com.ruoyi.Xidian.mapper.*;
 import com.ruoyi.Xidian.service.IDdataService;
 import com.ruoyi.Xidian.support.PathLockManager;
 import com.ruoyi.Xidian.utils.NickNameUtil;
@@ -27,15 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -67,8 +57,12 @@ public class DdataServiceImpl implements IDdataService
     @Autowired
     private PathLockManager pathLockManager;
 
+    @Autowired
+    private BackDataMapper backDataMapper;
+
     private final String profile = RuoYiConfig.getProfile() + "/data";
     private final String backUPdir = RuoYiConfig.getBackupDir();
+    private final String backAndRestore = RuoYiConfig.getBackAndRestore();
 
     @Override
     public List<DdataInfo> selectDdataInfoList(DdataInfo ddataInfo)
@@ -887,6 +881,116 @@ public class DdataServiceImpl implements IDdataService
         }
         return 1;
     }
+    @Override
+    public int backupDataById(Integer id){
+        DdataInfo cachedDataInfo = redisCache.getCacheObject(CacheConstants.DATA_INFO_KEY + id);
+        DdataInfo ddataInfo = cachedDataInfo != null ? cachedDataInfo : ddataMapper.selectDdataInfoById(id);
+        if (ddataInfo == null || StringUtils.isEmpty(ddataInfo.getExperimentId()) || StringUtils.isEmpty(ddataInfo.getDataFilePath())) {
+            log.warn("备份失败，数据不存在或缺少必要信息，id={}", id);
+            return 0;
+        }
+        DExperimentInfo experimentInfo = dExperimentInfoMapper.selectDExperimentInfoByExperimentId(ddataInfo.getExperimentId());
+        if (experimentInfo == null || experimentInfo.getProjectId() == null) {
+            log.warn("备份失败，试验信息不存在，id={}, experimentId={}", id, ddataInfo.getExperimentId());
+            return 0;
+        }
+        DProjectInfo projectInfo = dProjectInfoMapper.selectDProjectInfoByProjectId(experimentInfo.getProjectId());
+        if(projectInfo == null){
+            log.warn("备份失败，项目信息不存在，id={}, projectId={}", id, experimentInfo.getProjectId());
+            return 0;
+        }
+        String relativePath = BuildDataFilePath(ddataInfo) + ddataInfo.getDataFilePath();
+        String backupFilePath = extractBaseName(ddataInfo.getDataFilePath()) + "_" + System.currentTimeMillis() + "_" + ddataInfo.getId() + extractSuffix(ddataInfo.getDataFilePath());
+        Path sourcePath = Paths.get(profile, relativePath).normalize();
+        Path targetPath = Paths.get(backAndRestore, backupFilePath).normalize();
+        try (PathLockManager.LockHandle ignored = pathLockManager.lockRead(sourcePath)) {
+            if (Files.notExists(sourcePath) || Files.isDirectory(sourcePath)) {
+                log.warn("备份失败，源文件不存在或不是文件，id={}, path={}", id, sourcePath);
+                return 0;
+            }
+            Path targetParent = targetPath.getParent();
+            if (targetParent != null && Files.notExists(targetParent)) {
+                Files.createDirectories(targetParent);
+            }
+            //已经备份后除非还原否则不可再备份
+            if(isDataFileHasBackup(id)){
+                return 0;
+            }
+            Files.copy(sourcePath,targetPath,StandardCopyOption.REPLACE_EXISTING);
+            BackupData backupData = transferDataToBackupData(ddataInfo, backupFilePath);
+            if (backupData == null || backDataMapper.insertBackupData(backupData) <= 0) {
+                log.warn("备份失败，备份记录入库失败，id={}", id);
+                return 0;
+            }
+        } catch (Exception e) {
+            log.info("备份异常");
+            return 0;
+        }
+        return 1;
+    }
+    //查看数据是否已经备份
+    private Boolean isDataFileHasBackup(Integer dataId){
+        if(backDataMapper.selectBackupDataByDataId(dataId)!=null){
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public List<BackupData> selectBackupDataList(BackupData backupData)
+    {
+        return backDataMapper.selectBackupDataList(backupData);
+    }
+
+    private BackupData transferDataToBackupData(DdataInfo ddataInfo, String backupFilePath) {
+        if (ddataInfo == null) {
+            return null;
+        }
+
+        BackupData backupData = new BackupData();
+        // 原始数据表ID，对应 DdataInfo 的 id
+        backupData.setDataInfoId(ddataInfo.getId());
+
+        backupData.setTargetId(ddataInfo.getTargetId());
+        backupData.setTargetType(ddataInfo.getTargetType());
+        backupData.setTargetCategory(ddataInfo.getTargetCategory());
+        backupData.setExperimentId(ddataInfo.getExperimentId());
+        backupData.setExperimentName(ddataInfo.getExperimentName());
+        backupData.setProjectId(ddataInfo.getProjectId());
+        backupData.setProjectName(ddataInfo.getProjectName());
+        backupData.setDataName(ddataInfo.getDataName());
+        backupData.setDataType(ddataInfo.getDataType());
+        backupData.setDeviceId(ddataInfo.getDeviceId());
+        backupData.setDeviceInfo(ddataInfo.getDeviceInfo());
+
+        // 源文件地址，对应原数据文件地址
+        backupData.setSourcePath(ddataInfo.getDataFilePath());
+        backupData.setBackupFilePath(backupFilePath);
+
+        backupData.setSampleFrequency(ddataInfo.getSampleFrequency());
+        backupData.setWorkStatus(ddataInfo.getWorkStatus());
+        backupData.setExtAttr(ddataInfo.getExtAttr());
+        backupData.setRemark(ddataInfo.getRemark());
+        if (ddataInfo.getIsSimulation() != null) {
+            backupData.setIsSimulation(Boolean.TRUE.equals(ddataInfo.getIsSimulation()) ? 1 : 0);
+        }
+        String name = NickNameUtil.getNickName();
+        backupData.setDeleteBy(name);
+        backupData.setDeleteTime(new Date());
+        backupData.setCreateBy(name);
+        backupData.setCreateTime(new Date());
+
+        // 默认未恢复
+        backupData.setIsRestored(0);
+
+        // 以下字段通常由后续流程补充，这里先不赋值
+        // backupData.setRestoredDataInfoId(null);
+        // backupData.setBackupFilePath(null);
+        // backupData.setRestoreBy(null);
+        // backupData.setRestoreTime(null);
+
+        return backupData;
+    }
 
     @Override
     public List<Map<String, Object>> getMovePathTree()
@@ -1033,11 +1137,11 @@ public class DdataServiceImpl implements IDdataService
 
     private boolean hasExperimentStoragePathConflict(String experimentId, Path experimentRoot, String storagePath)
     {
-        if (ddataMapper.selectSameNameFile(experimentId, storagePath) != null)
+        if (ddataMapper.selectSameNameFile(experimentId, storagePath) != null || Files.exists(resolveAbsoluteDataPath(experimentRoot, storagePath)))
         {
             return true;
         }
-        return Files.exists(resolveAbsoluteDataPath(experimentRoot, storagePath));
+        return false;
     }
 
     private DdataInfo buildSimulationResultDataInfo(

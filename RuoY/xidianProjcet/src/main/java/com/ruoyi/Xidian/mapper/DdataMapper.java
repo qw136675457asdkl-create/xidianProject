@@ -24,4 +24,6 @@ public interface DdataMapper {
     DdataInfo selectSameNameFile(@Param("experimentId") String experimentId, @Param("dataFilePath") String dataFilePath);
 
     int updateDdataInfos(@Param("list")List<DdataInfo> ddataInfos);
+
+    DdataInfo selectDdataInfoById(Integer id);
 }
