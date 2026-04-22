@@ -5,6 +5,7 @@ import com.ruoyi.Xidian.domain.DTO.MatlabExecutionResultDTO;
 import com.ruoyi.Xidian.service.MatlabCodeExecutionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @Slf4j
@@ -16,6 +17,7 @@ public class MatlabCodeController {
     @Autowired
     private MatlabCodeExecutionService executionService;
 
+    @PreAuthorize("@ss.hasPermi('system:machineLearning:execute')")
     @PostMapping("/execute")
     public MatlabExecutionResultDTO executeCode(@RequestBody MatlabCodeRequestDTO request) {
         log.info("==========================================");

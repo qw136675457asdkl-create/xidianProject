@@ -5,6 +5,7 @@ import com.ruoyi.Xidian.domain.DTO.PythonExecutionResultDTO;
 import com.ruoyi.Xidian.service.PythonCodeExecutionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @Slf4j
@@ -19,6 +20,7 @@ public class PythonCodeController {
     /**
      * 执行代码接口 - 结果输出到控制台
      */
+    @PreAuthorize("@ss.hasPermi('system:machineLearning:execute')")
     @PostMapping("/execute")
     public PythonExecutionResultDTO executeCode(@RequestBody PythonCodeRequestDTO request) {
         log.info("========== 收到新的代码执行请求 ==========");

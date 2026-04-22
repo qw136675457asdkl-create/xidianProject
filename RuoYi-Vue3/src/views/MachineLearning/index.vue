@@ -1,5 +1,12 @@
 <template>
-  <div class="app-container">
+  <div
+    class="app-container"
+    v-hasPermi="[
+      'system:machineLearning:save',
+      'system:machineLearning:reset',
+      'system:machineLearning:execute'
+    ]"
+  >
     <el-form
       ref="formRef"
       v-loading="loading"
@@ -14,7 +21,7 @@
           <div class="config-panel config-panel--runner">
             <div class="config-panel__title">Python 代码执行器</div>
 
-            <div class="runner-section runner-section--python">
+            <div class="runner-section runner-section--python" v-hasPermi="['system:machineLearning:execute']">
               <div class="runner-section__header">
                 <div class="runner-section__subtitle">
                   输入 Python 代码并发送到后端执行，结果会显示在下方。
@@ -86,7 +93,7 @@
           <div class="config-panel config-panel--runner">
             <div class="config-panel__title">Matlab 代码执行器</div>
 
-            <div class="runner-section runner-section--matlab">
+            <div class="runner-section runner-section--matlab" v-hasPermi="['system:machineLearning:execute']">
               <div class="runner-section__header">
                 <div class="runner-section__subtitle">
                   输入 Matlab 代码并发送到后端执行，可在下方查看 stdout 与 stderr。
@@ -416,7 +423,7 @@
         </el-col>
       </el-row>
 
-      <el-form-item class="action-bar">
+      <el-form-item class="action-bar" v-hasPermi="['system:machineLearning:save', 'system:machineLearning:reset']">
         <el-button type="primary" @click="submitForm">保存环境配置</el-button>
         <el-button @click="resetForm">恢复默认配置</el-button>
       </el-form-item>
@@ -427,6 +434,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import auth from '@/plugins/auth'
 import {
   executeMatlabCode,
   executePythonCode,
@@ -846,7 +854,9 @@ function loadConfiguration() {
 }
 
 onMounted(() => {
-  loadConfiguration()
+  if (auth.hasPermi('system:machineLearning:query')) {
+    loadConfiguration()
+  }
 })
 </script>
 
