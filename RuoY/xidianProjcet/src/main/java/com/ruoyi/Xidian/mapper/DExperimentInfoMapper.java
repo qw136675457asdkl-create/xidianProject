@@ -65,4 +65,6 @@ public interface DExperimentInfoMapper
     List<DExperimentInfo> selectDExperimentInfoByExperimentIds(List<String> experimentIds);
 
     public DExperimentInfo selectSamePathExperiment(@Param("experimentName") String experimentName,@Param("projectId") Long projectId);
+
+    public DExperimentInfo selectExperimentByProjectNameAndExperimentName(@Param("experimentName") String experimentName,@Param("projectName") String projectName);
 }

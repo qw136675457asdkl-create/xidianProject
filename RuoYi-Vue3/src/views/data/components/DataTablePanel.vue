@@ -23,7 +23,7 @@
           <template #default="scope">
             <el-tag class="status-chip" effect="light" round :type="scope.row.isSimulation === true ? 'warning' : scope.row.isSimulation === false ? 'warning' : 'info'">
               <span v-if="scope.row.isSimulation === true">仿真</span>
-              <span v-else-if="scope.row.isSimulation === false">模拟</span>
+              <span v-else-if="scope.row.isSimulation === false">真实</span>
               <span v-else>未知类型</span>
             </el-tag>
           </template>

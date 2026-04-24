@@ -98,7 +98,6 @@
 package com.ruoyi.Xidian.service.impl;
 
 
-import com.ruoyi.Xidian.domain.DTO.PythonCodeRequestDTO;
 import com.ruoyi.Xidian.domain.DTO.PythonExecutionResultDTO;
 import com.ruoyi.Xidian.service.PythonExecutionService;
 import com.ruoyi.Xidian.utils.PythonCommandUtil;
@@ -174,7 +173,7 @@ public class PythonExecutionServiceImpl implements PythonExecutionService {
             // 6. 先检查退出码
             int exitCode = process.exitValue();
 
-            Charset charset = Charset.forName("GBK");
+            Charset charset = Charset.defaultCharset();
             String stdout = readAll(process.getInputStream(), charset);
             String stderr = readAll(process.getErrorStream(), charset);
 

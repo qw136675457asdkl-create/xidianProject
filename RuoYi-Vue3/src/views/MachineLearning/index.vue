@@ -1,12 +1,5 @@
 <template>
-  <div
-    class="app-container"
-    v-hasPermi="[
-      'system:machineLearning:save',
-      'system:machineLearning:reset',
-      'system:machineLearning:execute'
-    ]"
-  >
+  <div class="app-container">
     <el-form
       ref="formRef"
       v-loading="loading"
@@ -21,7 +14,7 @@
           <div class="config-panel config-panel--runner">
             <div class="config-panel__title">Python 代码执行器</div>
 
-            <div class="runner-section runner-section--python" v-hasPermi="['system:machineLearning:execute']">
+            <div class="runner-section runner-section--python">
               <div class="runner-section__header">
                 <div class="runner-section__subtitle">
                   输入 Python 代码并发送到后端执行，结果会显示在下方。
@@ -43,6 +36,7 @@
                 <el-button
                   type="primary"
                   :loading="pythonRunner.loading"
+                  v-hasPermi="['system:machineLearning:execute']"
                   @click="runPythonExecutor"
                 >
                   发送代码
@@ -93,7 +87,7 @@
           <div class="config-panel config-panel--runner">
             <div class="config-panel__title">Matlab 代码执行器</div>
 
-            <div class="runner-section runner-section--matlab" v-hasPermi="['system:machineLearning:execute']">
+            <div class="runner-section runner-section--matlab">
               <div class="runner-section__header">
                 <div class="runner-section__subtitle">
                   输入 Matlab 代码并发送到后端执行，可在下方查看 stdout 与 stderr。
@@ -140,6 +134,7 @@
                 <el-button
                   type="primary"
                   :loading="matlabRunner.loading"
+                  v-hasPermi="['system:machineLearning:execute']"
                   @click="runMatlabExecutor"
                 >
                   发送代码
@@ -196,26 +191,20 @@
               <el-input
                 v-model="formData.field119"
                 type="text"
-                placeholder="请选择 Python 解释器可执行文件（python.exe）"
+                placeholder="请输入 Python 解释器路径（如 /usr/local/python313/bin/python3.13）"
                 clearable
                 :style="fullWidthStyle"
               />
             </el-form-item>
 
             <el-form-item label="Python 版本选择" prop="field104">
-              <el-select
+              <el-input
                 v-model="formData.field104"
-                placeholder="请选择 Python 版本"
+                type="text"
+                placeholder="请输入 Python 版本"
                 clearable
                 :style="fullWidthStyle"
-              >
-                <el-option
-                  v-for="item in pythonVersionOptions"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
-                />
-              </el-select>
+              />
             </el-form-item>
 
             <el-form-item label="自动安装依赖库" prop="field105">
@@ -339,26 +328,20 @@
               <el-input
                 v-model="formData.field124"
                 type="text"
-                placeholder="请选择 Matlab 根目录（如 Matlab R2023a）"
+                placeholder="请输入 Matlab 可执行文件路径（如 /usr/local/bin/matlab）"
                 clearable
                 :style="fullWidthStyle"
               />
             </el-form-item>
 
             <el-form-item label="Matlab 版本选择" prop="field125">
-              <el-select
+              <el-input
                 v-model="formData.field125"
-                placeholder="请选择 Matlab 版本"
+                type="text"
+                placeholder="请输入 Matlab 版本"
                 clearable
                 :style="fullWidthStyle"
-              >
-                <el-option
-                  v-for="item in matlabVersionOptions"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
-                />
-              </el-select>
+              />
             </el-form-item>
 
             <el-form-item label="Matlab 引擎 API 启用" prop="field126">
@@ -423,9 +406,9 @@
         </el-col>
       </el-row>
 
-      <el-form-item class="action-bar" v-hasPermi="['system:machineLearning:save', 'system:machineLearning:reset']">
-        <el-button type="primary" @click="submitForm">保存环境配置</el-button>
-        <el-button @click="resetForm">恢复默认配置</el-button>
+      <el-form-item class="action-bar">
+        <el-button type="primary" @click="submitForm" v-hasPermi="['system:machineLearning:save']">保存环境配置</el-button>
+        <el-button @click="resetForm" v-hasPermi="['system:machineLearning:reset']">恢复默认配置</el-button>
       </el-form-item>
     </el-form>
   </div>
@@ -434,8 +417,9 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import auth from '@/plugins/auth'
+import { checkPermi } from '@/utils/permission'
 import {
+  cancelMatlabTask,
   executeMatlabCode,
   executePythonCode,
   getMachineLearningConfiguration,
@@ -444,6 +428,20 @@ import {
 } from '@/api/machineLearning'
 
 const fullWidthStyle = { width: '100%' }
+const DEFAULT_PYTHON_PATH = '/usr/local/python313/bin/python3.13'
+const DEFAULT_PYTHON_VERSION = 'Python 3.13'
+const DEFAULT_MATLAB_PATH = '/usr/local/bin/matlab'
+const DEFAULT_MATLAB_VERSION = 'R2024A'
+const MACHINE_LEARNING_PERMISSION = Object.freeze({
+  execute: 'system:machineLearning:execute',
+  save: 'system:machineLearning:save',
+  reset: 'system:machineLearning:reset'
+})
+const MACHINE_LEARNING_LOAD_PERMISSIONS = Object.freeze([
+  MACHINE_LEARNING_PERMISSION.execute,
+  MACHINE_LEARNING_PERMISSION.save,
+  MACHINE_LEARNING_PERMISSION.reset
+])
 
 const DEFAULT_PYTHON_CODE = `print("Hello, World!")
 for i in range(3):
@@ -508,14 +506,6 @@ legend('sin(x)', 'cos(x)');
 disp('图形已绘制，请在 MATLAB 图形窗口中查看。')`
 }
 
-const pythonVersionOptions = [
-  { label: 'Python 3.7', value: 1 },
-  { label: 'Python 3.8', value: 2 },
-  { label: 'Python 3.9', value: 3 },
-  { label: 'Python 3.10', value: 4 },
-  { label: 'Python 3.11', value: 5 }
-]
-
 const pythonDependencyOptions = [
   {
     label: '配置完成后自动安装常用机器学习库（numpy、pandas、scikit-learn 等）',
@@ -572,16 +562,6 @@ const pythonLogOptions = [
   }
 ]
 
-const matlabVersionOptions = [
-  { label: 'R2020b', value: 1 },
-  { label: 'R2021a', value: 2 },
-  { label: 'R2021b', value: 3 },
-  { label: 'R2022a', value: 4 },
-  { label: 'R2022b', value: 5 },
-  { label: 'R2023a', value: 6 },
-  { label: 'R2023b', value: 7 }
-]
-
 const matlabEngineOptions = [
   {
     label: '启用 Matlab Engine API for Python（支持 Python 调用 Matlab 函数）',
@@ -612,10 +592,10 @@ const matlabEnvVarOptions = [
 
 function createDefaultFormData() {
   return {
-    field119: undefined,
-    field104: undefined,
+    field119: DEFAULT_PYTHON_PATH,
+    field104: DEFAULT_PYTHON_VERSION,
     field105: [pythonDependencyOptions[0].value],
-    field107: undefined,
+    field107: pythonSourceOptions[0].value,
     field108: [pythonEnvOptions[0].value],
     field109: undefined,
     field111: [pythonAutoCreateOptions[0].value],
@@ -623,8 +603,8 @@ function createDefaultFormData() {
     field113: [],
     field114: [pythonVerifyOptions[0].value],
     field115: [pythonLogOptions[0].value],
-    field124: undefined,
-    field125: undefined,
+    field124: DEFAULT_MATLAB_PATH,
+    field125: DEFAULT_MATLAB_VERSION,
     field126: [matlabEngineOptions[0].value],
     field127: [],
     field128: [matlabCacheOptions[0].value],
@@ -649,8 +629,8 @@ function createRunnerState(defaultCode) {
 }
 
 const rules = {
-  field119: [{ required: true, message: '请选择 Python 解释器可执行文件（python.exe）', trigger: 'blur' }],
-  field104: [{ required: true, message: '请选择 Python 版本', trigger: 'change' }],
+  field119: [{ required: true, message: '请输入 Python 解释器路径', trigger: 'blur' }],
+  field104: [{ required: true, message: '请输入 Python 版本', trigger: 'blur' }],
   field105: [],
   field107: [{ required: true, message: '请选择依赖库安装源', trigger: 'change' }],
   field108: [],
@@ -660,8 +640,8 @@ const rules = {
   field113: [],
   field114: [],
   field115: [],
-  field124: [{ required: true, message: '请选择 Matlab 根目录（如 Matlab R2023a）', trigger: 'blur' }],
-  field125: [{ required: true, message: '请选择 Matlab 版本', trigger: 'change' }],
+  field124: [{ required: true, message: '请输入 Matlab 可执行文件路径', trigger: 'blur' }],
+  field125: [{ required: true, message: '请输入 Matlab 版本', trigger: 'blur' }],
   field126: [],
   field127: [],
   field128: [],
@@ -737,7 +717,31 @@ function buildResultMeta(runner) {
   return parts.join(' · ')
 }
 
-async function executeRunner(runner, languageLabel, executor) {
+function ensurePermission(permission, message) {
+  if (checkPermi([permission])) {
+    return true
+  }
+  ElMessage.error(message)
+  return false
+}
+
+function hasAnyPermission(permissions) {
+  return permissions.some((permission) => checkPermi([permission]))
+}
+
+async function handleRunnerFailure(failureHandler) {
+  if (typeof failureHandler !== 'function') {
+    return
+  }
+
+  try {
+    await failureHandler()
+  } catch (cancelError) {
+    console.warn('Failed to cancel MATLAB task after runner failure:', cancelError)
+  }
+}
+
+async function executeRunner(runner, languageLabel, executor, failureHandler) {
   const code = runner.code.trim()
   if (!code) {
     setRunnerStatus(runner, `请输入 ${languageLabel} 代码后再发送`, 'warning')
@@ -757,8 +761,12 @@ async function executeRunner(runner, languageLabel, executor) {
       normalized.success ? `${languageLabel} 代码执行完成` : `${languageLabel} 代码执行失败`,
       normalized.success ? 'success' : 'error'
     )
+    if (!normalized.success) {
+      await handleRunnerFailure(failureHandler)
+    }
     applyRunnerResult(runner, normalized)
   } catch (error) {
+    await handleRunnerFailure(failureHandler)
     const message =
       error?.response?.data?.stderr ||
       error?.response?.data?.msg ||
@@ -779,11 +787,17 @@ async function executeRunner(runner, languageLabel, executor) {
 }
 
 function runPythonExecutor() {
+  if (!ensurePermission(MACHINE_LEARNING_PERMISSION.execute, '暂无代码执行权限')) {
+    return Promise.resolve()
+  }
   return executeRunner(pythonRunner, 'Python', executePythonCode)
 }
 
 function runMatlabExecutor() {
-  return executeRunner(matlabRunner, 'Matlab', executeMatlabCode)
+  if (!ensurePermission(MACHINE_LEARNING_PERMISSION.execute, '暂无代码执行权限')) {
+    return Promise.resolve()
+  }
+  return executeRunner(matlabRunner, 'Matlab', executeMatlabCode, cancelMatlabTask)
 }
 
 function applyMatlabExample(type) {
@@ -793,6 +807,9 @@ function applyMatlabExample(type) {
 }
 
 function submitForm() {
+  if (!ensurePermission(MACHINE_LEARNING_PERMISSION.save, '暂无保存权限')) {
+    return
+  }
   formRef.value.validate((valid) => {
     if (!valid) {
       return
@@ -814,6 +831,9 @@ function submitForm() {
 }
 
 function resetForm() {
+  if (!ensurePermission(MACHINE_LEARNING_PERMISSION.reset, '暂无重置权限')) {
+    return
+  }
   ElMessageBox.confirm('确定要恢复默认配置吗？', '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
@@ -838,6 +858,11 @@ function resetForm() {
 }
 
 function loadConfiguration() {
+  Object.assign(formData, createDefaultFormData())
+  if (!hasAnyPermission(MACHINE_LEARNING_LOAD_PERMISSIONS)) {
+    return
+  }
+
   loading.value = true
   getMachineLearningConfiguration()
     .then((res) => {
@@ -854,9 +879,7 @@ function loadConfiguration() {
 }
 
 onMounted(() => {
-  if (auth.hasPermi('system:machineLearning:query')) {
-    loadConfiguration()
-  }
+  loadConfiguration()
 })
 </script>
 

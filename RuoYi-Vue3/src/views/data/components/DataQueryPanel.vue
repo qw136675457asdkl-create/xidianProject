@@ -12,7 +12,7 @@
       </el-form-item>
       <el-form-item label="所属项目" prop="projectId">
         <el-select v-model="queryParams.projectId" placeholder="请选择所属项目" clearable class="query-control">
-          <el-option v-for="item in projectOptions" :key="item.projectId" :label="item.projectName" :value="item.projectId" />
+          <el-option v-for="item in projectOptions" :key="item.projectId" :label="item.projectName" :value="String(item.projectId)" />
         </el-select>
       </el-form-item>
 
@@ -21,12 +21,15 @@
       </el-form-item>
       <el-form-item label="是否模拟" prop="isSimulation">
         <el-select v-model="queryParams.isSimulation" placeholder="请选择数据类型" clearable class="query-control">
-          <el-option label="真实" :value="true" />
-          <el-option label="模拟" :value="false" />
+          <el-option label="真实" :value="false" />
+          <el-option label="仿真" :value="true" />
         </el-select>
       </el-form-item>
       <el-form-item label="数据状态" prop="workStatus">
-        <el-input v-model="queryParams.workStatus" placeholder="请输入数据状态" clearable class="query-control" @keyup.enter="emit('search')" />
+        <el-select v-model="queryParams.workStatus" placeholder="请选择数据状态" clearable class="query-control">
+          <el-option label="完成" value="completed" />
+          <el-option label="尚未完成" value="incomplete" />
+        </el-select>
       </el-form-item>
       <el-form-item label="创建时间" class="query-date-item">
         <el-date-picker

@@ -103,6 +103,9 @@ public class SysUserServiceImpl implements ISysUserService
         return userMapper.selectUserByUserName(userName);
     }
 
+    @Override
+    public SysUser selectUserByNickName(String nickName){return  userMapper.selectUserByNickName(nickName);}
+
     /**
      * 通过用户ID查询用户
      * 

@@ -1,9 +1,6 @@
 package com.ruoyi.Xidian.service.impl;
 
-import com.ruoyi.Xidian.domain.BackupData;
-import com.ruoyi.Xidian.domain.DExperimentInfo;
-import com.ruoyi.Xidian.domain.DProjectInfo;
-import com.ruoyi.Xidian.domain.DdataInfo;
+import com.ruoyi.Xidian.domain.*;
 import com.ruoyi.Xidian.mapper.*;
 import com.ruoyi.Xidian.service.IDExperimentInfoService;
 import com.ruoyi.Xidian.service.IDProjectInfoService;
@@ -436,7 +433,7 @@ public class DdataServiceImpl implements IDdataService
         }
         return successCount;
     }
-
+    //登记数据信息
     @Override
     public Integer insertDdataInfoByPath(DdataInfo ddataInfo)
     {
@@ -989,9 +986,8 @@ public class DdataServiceImpl implements IDdataService
             String experimentId,
             List<String> storedFileNames,
             List<String> sourceFileNames,
-            Integer sampleFrequency,
             String createBy,
-            String targetCategory)
+            String targetCategory, List<TaskDataGroup> taskDataGroups)
     {
         if (StringUtils.isEmpty(experimentId) || StringUtils.isEmpty(storedFileNames))
         {
@@ -1028,9 +1024,8 @@ public class DdataServiceImpl implements IDdataService
                         experimentInfo,
                         dataFilePath,
                         sourceFileNames.get(index),
-                        sampleFrequency,
                         createBy,
-                        targetCategory);
+                        targetCategory,taskDataGroups.get(index));
                 DdataInfo oldInfo = ddataMapper.selectSameNameFile(experimentId, dataFilePath);
                 if (oldInfo != null)
                 {
@@ -1040,7 +1035,6 @@ public class DdataServiceImpl implements IDdataService
                     index++;
                     continue;
                 }
-
                 ddataMapper.insertDdataInfo(ddataInfo);
                 index++;
             }
@@ -1651,24 +1645,23 @@ public class DdataServiceImpl implements IDdataService
             DExperimentInfo experimentInfo,
             String dataFilePath,
             String sourceFileName,
-            Integer sampleFrequency,
             String createBy,
-            String targetCategory)
+            String targetCategory,TaskDataGroup taskDataGroup)
     {
         String normalizedDataFilePath = normalizeDataFilePath(dataFilePath);
         DdataInfo ddataInfo = new DdataInfo();
         ddataInfo.setExperimentId(experimentInfo.getExperimentId());
         ddataInfo.setTargetId(experimentInfo.getTargetId());
         ddataInfo.setTargetType(resolveExperimentTargetType(experimentInfo));
-        ddataInfo.setTargetCategory(resolveSimulationTargetCategory(targetCategory, experimentInfo, normalizedDataFilePath));
+        ddataInfo.setTargetCategory(taskDataGroup.getGroupName());
         ddataInfo.setDataName(sourceFileName);
-        ddataInfo.setDataType(resolveExperimentDataType(normalizedDataFilePath));
+        ddataInfo.setDataType(taskDataGroup.getGroupName());
         ddataInfo.setDataFilePath(normalizedDataFilePath);
-        ddataInfo.setSampleFrequency(resolveSimulationSampleFrequency(sampleFrequency));
+        ddataInfo.setSampleFrequency(taskDataGroup.getFrequencyHz().intValueExact());
         ddataInfo.setDeviceId(null);
         ddataInfo.setDeviceInfo(null);
         ddataInfo.setWorkStatus("completed");
-        ddataInfo.setIsSimulation(Boolean.TRUE);
+        ddataInfo.setIsSimulation(taskDataGroup.getIsSimulation());
         ddataInfo.setCreateBy(resolveSimulationCreateBy(createBy, experimentInfo));
         return ddataInfo;
     }
@@ -1734,30 +1727,6 @@ public class DdataServiceImpl implements IDdataService
             return experimentInfo.getCreateBy().trim();
         }
         return "system";
-    }
-
-    private String resolveSimulationTargetCategory(
-            String targetCategory,
-            DExperimentInfo experimentInfo,
-            String dataFilePath)
-    {
-        if (StringUtils.isNotEmpty(targetCategory))
-        {
-            return targetCategory.trim();
-        }
-
-        String resolvedTargetType = resolveExperimentTargetType(experimentInfo);
-        if (StringUtils.isNotEmpty(resolvedTargetType))
-        {
-            return resolvedTargetType;
-        }
-
-        String resolvedDataType = resolveExperimentDataType(dataFilePath);
-        if (StringUtils.isNotEmpty(resolvedDataType))
-        {
-            return resolvedDataType;
-        }
-        return "simulation";
     }
 
     private String normalizeOptionalText(String value)

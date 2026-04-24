@@ -1,7 +1,7 @@
 package com.ruoyi.Xidian.service.impl;
 
-import com.ruoyi.Xidian.domain.DTO.MatlabCodeRequestDTO;
 import com.ruoyi.Xidian.domain.DTO.MatlabExecutionResultDTO;
+import com.ruoyi.Xidian.domain.DTO.MatlabTaskControlResultDTO;
 import com.ruoyi.Xidian.service.MatlabExecutionService;
 import com.ruoyi.Xidian.utils.MatlabCommandUtil;
 import com.ruoyi.Xidian.utils.MatlabEngineReuseUtil;
@@ -9,16 +9,23 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @Service
 public class MatlabExecutionServiceImpl implements MatlabExecutionService {
 
     private static final AtomicBoolean IN_PROGRESS = new AtomicBoolean(false);
+    private static final AtomicReference<Process> ACTIVE_PROCESS = new AtomicReference<>();
 
     @Value("${matlab.command:matlab}")
     private String matlabCommand;
@@ -38,85 +45,64 @@ public class MatlabExecutionServiceImpl implements MatlabExecutionService {
     @Override
     public MatlabExecutionResultDTO executeMatlab(String code) {
         File tempFile = null;
+        Process process = null;
         long startedAt = System.currentTimeMillis();
 
         try {
-            log.info("MATLAB执行服务开始处理");
+            log.info("Starting MATLAB execution");
 
-            if (singleInstance) {
-                if (!IN_PROGRESS.compareAndSet(false, true)) {
-                    String msg = "MATLAB 正在运行中，本次请求不再新启动 MATLAB。";
-                    log.warn(msg);
-                    return MatlabExecutionResultDTO.builder()
-                            .success(false)
-                            .stdout("")
-                            .stderr(msg)
-                            .exitCode(null)
-                            .durationMs(System.currentTimeMillis() - startedAt)
-                            .startedAtEpochMs(startedAt)
-                            .build();
-                }
+            if (singleInstance && !IN_PROGRESS.compareAndSet(false, true)) {
+                return buildFailureResult(
+                        "MATLAB task is already running. Please wait for the current task to finish.",
+                        startedAt
+                );
             }
 
-            // 优先复用 MATLAB Engine（连接已启动共享会话或启动一个并复用）
             if (shouldUseEngine()) {
                 MatlabExecutionResultDTO engineResult = executeWithEngine(code, startedAt);
                 if (engineResult.isSuccess() || isEngineOnlyMode()) {
                     return engineResult;
                 }
-                log.warn("MATLAB Engine execution failed, fallback to process mode: {}", engineResult.getStderr());
+                log.warn("MATLAB engine execution failed, falling back to process mode: {}", engineResult.getStderr());
             }
 
-            // 1. 创建临时MATLAB脚本文件
             tempFile = File.createTempFile("matlab_script_", ".m");
             tempFile.deleteOnExit();
-            log.info("创建临时脚本文件: {}", tempFile.getAbsolutePath());
-
-            // 2. 写入MATLAB代码
             try (FileWriter writer = new FileWriter(tempFile)) {
                 writer.write(code);
-                // 确保脚本最后有退出命令（可选）
                 if (!code.trim().endsWith("exit")) {
                     writer.write("\n\nexit;");
                 }
             }
-            log.info("MATLAB代码已写入临时文件");
 
-            // 3. 获取MATLAB命令
             String command = MatlabCommandUtil.getMatlabCommand(matlabCommand);
-            log.info("使用命令: {}", command);
-
-            // 4. 执行MATLAB进程
-            // MATLAB批处理模式：matlab -batch "run('script.m')"
             String scriptPath = tempFile.getAbsolutePath().replace("\\", "/").replace("'", "''");
             ProcessBuilder pb = new ProcessBuilder(
                     command,
                     batchMode,
                     "run('" + scriptPath + "')"
             );
-
             pb.redirectErrorStream(false);
 
-            Process process = pb.start();
-            Charset charset = Charset.forName("GBK");
+            process = pb.start();
+            ACTIVE_PROCESS.set(process);
+
+            Charset charset = Charset.defaultCharset();
             StreamCollector stdoutCollector = new StreamCollector(process.getInputStream(), charset);
             StreamCollector stderrCollector = new StreamCollector(process.getErrorStream(), charset);
             Thread stdoutThread = startCollectorThread("matlab-stdout-reader", stdoutCollector);
             Thread stderrThread = startCollectorThread("matlab-stderr-reader", stderrCollector);
-            log.info("MATLAB进程已启动，等待执行结果...");
 
-            // 5. 等待执行完成
             boolean completed = process.waitFor(timeout, TimeUnit.SECONDS);
-
             if (!completed) {
-                log.error("MATLAB 执行超时（{}秒）", timeout);
-                process.destroyForcibly();
-                process.waitFor(5, TimeUnit.SECONDS);
+                terminateProcessTree(process);
                 joinCollectorThread(stdoutThread);
                 joinCollectorThread(stderrThread);
+
                 String stdout = filterMatlabNoise(stdoutCollector.getContent());
                 String stderr = filterMatlabNoise(stderrCollector.getContent());
                 String timeoutMessage = "MATLAB execution timed out after " + timeout + " seconds";
+
                 return MatlabExecutionResultDTO.builder()
                         .success(false)
                         .stdout(stdout)
@@ -125,43 +111,20 @@ public class MatlabExecutionServiceImpl implements MatlabExecutionService {
                         .durationMs(System.currentTimeMillis() - startedAt)
                         .startedAtEpochMs(startedAt)
                         .build();
-                /*
-                String timeoutMsg = "MATLAB 鎵ц瓒呮椂锛堣秴杩? + timeout + "绉掞級";
-                return MatlabExecutionResultDTO.builder()
-                        .success(false)
-                        .stdout(stdout)
-                        .stderr("MATLAB 执行超时（超过" + timeout + "秒）")
-                        .exitCode(null)
-                        .durationMs(System.currentTimeMillis() - startedAt)
-                        .startedAtEpochMs(startedAt)
-                        .build();
-                */
             }
+
             int exitCode = process.exitValue();
             joinCollectorThread(stdoutThread);
             joinCollectorThread(stderrThread);
-            String stdoutRaw = stdoutCollector.getContent();
-            String stderrRaw = stderrCollector.getContent();
 
-            String stdout = filterMatlabNoise(stdoutRaw);
-            String stderr = filterMatlabNoise(stderrRaw);
-
+            String stdout = filterMatlabNoise(stdoutCollector.getContent());
+            String stderr = filterMatlabNoise(stderrCollector.getContent());
             boolean success = exitCode == 0;
+
             if (success) {
-                log.info("========== MATLAB 代码执行结果 ==========");
-                log.info(stdout);
-                log.info("==========================================");
-                log.info("MATLAB进程退出码: {}", exitCode);
+                log.info("MATLAB execution succeeded with exit code {}", exitCode);
             } else {
-                log.error("========== MATLAB 代码执行错误 ==========");
-                if (!stdout.isBlank()) {
-                    log.error("stdout:\n{}", stdout);
-                }
-                if (!stderr.isBlank()) {
-                    log.error("stderr:\n{}", stderr);
-                }
-                log.error("==========================================");
-                log.error("MATLAB进程退出码: {}", exitCode);
+                log.error("MATLAB execution failed with exit code {}", exitCode);
             }
 
             return MatlabExecutionResultDTO.builder()
@@ -172,49 +135,138 @@ public class MatlabExecutionServiceImpl implements MatlabExecutionService {
                     .durationMs(System.currentTimeMillis() - startedAt)
                     .startedAtEpochMs(startedAt)
                     .build();
-
         } catch (IOException e) {
-            log.error("IO错误: {}", e.getMessage());
-            return MatlabExecutionResultDTO.builder()
-                    .success(false)
-                    .stdout("")
-                    .stderr("IO错误: " + e.getMessage())
-                    .exitCode(null)
-                    .durationMs(System.currentTimeMillis() - startedAt)
-                    .startedAtEpochMs(startedAt)
-                    .build();
+            log.error("Failed to start MATLAB process", e);
+            return buildFailureResult("Failed to start MATLAB process: " + e.getMessage(), startedAt);
         } catch (InterruptedException e) {
-            log.error("执行被中断: {}", e.getMessage());
             Thread.currentThread().interrupt();
-            return MatlabExecutionResultDTO.builder()
-                    .success(false)
-                    .stdout("")
-                    .stderr("执行被中断: " + e.getMessage())
-                    .exitCode(null)
-                    .durationMs(System.currentTimeMillis() - startedAt)
-                    .startedAtEpochMs(startedAt)
-                    .build();
+            log.error("MATLAB execution thread was interrupted", e);
+            return buildFailureResult("MATLAB execution was interrupted: " + e.getMessage(), startedAt);
         } catch (RuntimeException e) {
-            String errorMsg = e.getMessage() == null ? "执行失败" : e.getMessage();
-            log.error("执行失败：{}", errorMsg, e);
-            return MatlabExecutionResultDTO.builder()
-                    .success(false)
-                    .stdout("")
-                    .stderr(errorMsg)
-                    .exitCode(null)
-                    .durationMs(System.currentTimeMillis() - startedAt)
-                    .startedAtEpochMs(startedAt)
-                    .build();
+            String errorMsg = e.getMessage() == null ? "MATLAB execution failed" : e.getMessage();
+            log.error("MATLAB execution failed", e);
+            return buildFailureResult(errorMsg, startedAt);
         } finally {
+            if (process != null) {
+                ACTIVE_PROCESS.compareAndSet(process, null);
+            }
             if (singleInstance) {
                 IN_PROGRESS.set(false);
             }
-            // 清理临时文件
-            if (tempFile != null && tempFile.exists()) {
-                tempFile.delete();
-                log.info("临时脚本文件已清理");
+            if (tempFile != null && tempFile.exists() && !tempFile.delete()) {
+                log.warn("Failed to delete temporary MATLAB script: {}", tempFile.getAbsolutePath());
             }
-            log.info("MATLAB执行服务处理完成");
+            log.info("MATLAB execution finished");
+        }
+    }
+
+    @Override
+    public MatlabTaskControlResultDTO cancelCurrentTask() {
+        Process process = ACTIVE_PROCESS.get();
+
+        if (process == null) {
+            if (IN_PROGRESS.get()) {
+                return MatlabTaskControlResultDTO.builder()
+                        .success(false)
+                        .cancelled(false)
+                        .message("A MATLAB task is active, but no cancellable external process is registered.")
+                        .build();
+            }
+            return MatlabTaskControlResultDTO.builder()
+                    .success(true)
+                    .cancelled(false)
+                    .message("No running MATLAB process was found.")
+                    .build();
+        }
+
+        if (!process.isAlive()) {
+            ACTIVE_PROCESS.compareAndSet(process, null);
+            return MatlabTaskControlResultDTO.builder()
+                    .success(true)
+                    .cancelled(false)
+                    .message("No running MATLAB process was found.")
+                    .build();
+        }
+
+        boolean cancelled = terminateProcessTree(process);
+        if (cancelled) {
+            ACTIVE_PROCESS.compareAndSet(process, null);
+        }
+
+        return MatlabTaskControlResultDTO.builder()
+                .success(cancelled)
+                .cancelled(cancelled)
+                .message(cancelled
+                        ? "Running MATLAB process has been cancelled."
+                        : "Failed to cancel the running MATLAB process.")
+                .build();
+    }
+
+    private MatlabExecutionResultDTO executeWithEngine(String code, long startedAt) {
+        MatlabEngineReuseUtil.ExecutionResult result = MatlabEngineReuseUtil.runCodeWithEngine(matlabCommand, code, timeout);
+        return MatlabExecutionResultDTO.builder()
+                .success(result.success)
+                .stdout(filterMatlabNoise(result.stdout))
+                .stderr(filterMatlabNoise(result.stderr))
+                .exitCode(result.exitCode)
+                .durationMs(result.durationMs)
+                .startedAtEpochMs(startedAt)
+                .build();
+    }
+
+    private boolean isEngineOnlyMode() {
+        return "engine".equalsIgnoreCase(matlabMode == null ? "" : matlabMode.trim());
+    }
+
+    private boolean shouldUseEngine() {
+        String mode = matlabMode == null ? "auto" : matlabMode.trim().toLowerCase();
+        if ("process".equals(mode)) {
+            return false;
+        }
+        if ("engine".equals(mode)) {
+            return MatlabEngineReuseUtil.isEngineAvailable();
+        }
+        return MatlabEngineReuseUtil.isEngineAvailable();
+    }
+
+    private static MatlabExecutionResultDTO buildFailureResult(String stderr, long startedAt) {
+        return MatlabExecutionResultDTO.builder()
+                .success(false)
+                .stdout("")
+                .stderr(stderr)
+                .exitCode(null)
+                .durationMs(System.currentTimeMillis() - startedAt)
+                .startedAtEpochMs(startedAt)
+                .build();
+    }
+
+    private static boolean terminateProcessTree(Process process) {
+        if (process == null) {
+            return false;
+        }
+        if (!process.isAlive()) {
+            return true;
+        }
+
+        ProcessHandle handle = process.toHandle();
+        handle.descendants().forEach(ProcessHandle::destroy);
+        process.destroy();
+
+        if (waitForExit(process, 2)) {
+            return true;
+        }
+
+        handle.descendants().forEach(ProcessHandle::destroyForcibly);
+        process.destroyForcibly();
+        return waitForExit(process, 5) || !process.isAlive();
+    }
+
+    private static boolean waitForExit(Process process, int seconds) {
+        try {
+            return process.waitFor(seconds, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return !process.isAlive();
         }
     }
 
@@ -248,40 +300,24 @@ public class MatlabExecutionServiceImpl implements MatlabExecutionService {
     }
 
     private static String filterMatlabNoise(String raw) {
-        if (raw == null || raw.isEmpty()) return "";
+        if (raw == null || raw.isEmpty()) {
+            return "";
+        }
         StringBuilder sb = new StringBuilder();
         for (String line : raw.split("\\R", -1)) {
             String trimmed = line == null ? "" : line.trim();
-            if (trimmed.isEmpty()) continue;
-            if (trimmed.contains("MATLAB is selecting")) continue;
-            if (trimmed.startsWith("Warning:")) continue;
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            if (trimmed.contains("MATLAB is selecting")) {
+                continue;
+            }
+            if (trimmed.startsWith("Warning:")) {
+                continue;
+            }
             sb.append(line).append("\n");
         }
         return sb.toString();
-    }
-
-    private MatlabExecutionResultDTO executeWithEngine(String code, long startedAt) {
-        MatlabEngineReuseUtil.ExecutionResult result = MatlabEngineReuseUtil.runCodeWithEngine(matlabCommand, code, timeout);
-        return MatlabExecutionResultDTO.builder()
-                .success(result.success)
-                .stdout(filterMatlabNoise(result.stdout))
-                .stderr(filterMatlabNoise(result.stderr))
-                .exitCode(result.exitCode)
-                .durationMs(result.durationMs)
-                .startedAtEpochMs(startedAt)
-                .build();
-    }
-
-    private boolean isEngineOnlyMode() {
-        return "engine".equalsIgnoreCase(matlabMode == null ? "" : matlabMode.trim());
-    }
-
-    private boolean shouldUseEngine() {
-        String mode = matlabMode == null ? "auto" : matlabMode.trim().toLowerCase();
-        if ("process".equals(mode)) return false;
-        if ("engine".equals(mode)) return MatlabEngineReuseUtil.isEngineAvailable();
-        // auto
-        return MatlabEngineReuseUtil.isEngineAvailable();
     }
 
     private static final class StreamCollector implements Runnable {

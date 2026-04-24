@@ -481,7 +481,9 @@
           <el-descriptions-item label="运动模型">{{ detailDialogData.motionModel || '--' }}</el-descriptions-item>
           <el-descriptions-item label="创建人">{{ detailDialogData.createBy || '--' }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ formatDateTime(detailDialogData.createTime) }}</el-descriptions-item>
-          <el-descriptions-item label="输出目录" :span="2">{{ detailDialogData.path || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="输出目录" :span="2">
+            {{ detailDialogData.path ? `./data${detailDialogData.path}` : '--' }}
+          </el-descriptions-item>
           <el-descriptions-item label="子任务概览" :span="2">
             {{ detailDialogData.dataCategorySummary || '--' }}
           </el-descriptions-item>
@@ -506,6 +508,21 @@
                 </el-tag>
               </template>
             </el-table-column>
+            <el-table-column label="操作" width="140" align="center">
+              <template #default="{ row }">
+                <el-button
+                  link
+                  type="primary"
+                  v-hasPermi="['dataInfo:info:list']"
+                  @click="handleOpenDataManager(row)"
+                >
+                  <template #icon>
+                    <svg-icon icon-class="eye-open" />
+                  </template>
+                  数据详情
+                </el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </div>
       </div>
@@ -515,6 +532,7 @@
 
 <script setup name="DataSimulation">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getInfo, getExperimentInfos } from '@/api/data/info'
 import {
@@ -542,6 +560,7 @@ const metricTemplateMap = ref({})
 const taskSocket = ref(null)
 const defaultOutputDirectory = 'csv_output/api_requests'
 const userStore = useUserStore()
+const router = useRouter()
 const MAX_SIMULATION_DURATION_MS = 3 * 24 * 60 * 60 * 1000
 const DEFAULT_SIMULATION_TIME_RANGE_MS = 5 * 60 * 1000
 const COORDINATE_RULES = [
@@ -1046,6 +1065,20 @@ function formatRange(startTimeMs, endTimeMs) {
     return '--'
   }
   return `${formatDateTime(startTimeMs)} 至 ${formatDateTime(endTimeMs)}`
+}
+
+function buildSimulationDataFilePath(dataName, outputType) {
+  const normalizedDataName = String(dataName || '').trim()
+  if (!normalizedDataName) {
+    return ''
+  }
+
+  const normalizedOutputType = String(outputType || '').trim().replace(/^\./, '')
+  const fileName = normalizedOutputType
+    ? `${normalizedDataName}.${normalizedOutputType}`
+    : normalizedDataName
+
+  return fileName.startsWith('/') ? fileName : `/${fileName}`
 }
 
 function normalizeProjectOptions(projects) {
@@ -1561,6 +1594,36 @@ async function handleView(row) {
   })
   detailDialogData.value.dataGroups = normalizeTaskDataGroups(taskDetail.dataGroups)
   detailDialogOpen.value = true
+}
+
+function handleOpenDataManager(row) {
+  const projectName = String(detailDialogData.value?.projectName || '').trim()
+  const experimentId = String(detailDialogData.value?.experimentId || '').trim()
+  const experimentName = String(detailDialogData.value?.experimentName || '').trim()
+  const dataFilePath = String(row?.dataFilePath || buildSimulationDataFilePath(row?.dataName, row?.outputType)).trim()
+
+  if (!projectName || !experimentId || !experimentName || !dataFilePath) {
+    ElMessage.warning('缺少跳转到数据管理所需的查询条件')
+    return
+  }
+
+  const nextQuery = {
+    autoQuery: '1',
+    source: 'simulation',
+    projectId: detailDialogData.value?.projectId,
+    projectName,
+    experimentId,
+    experimentName,
+    dataFilePath
+  }
+
+  detailDialogOpen.value = false
+  router.push({
+    path: '/data',
+    query: Object.fromEntries(
+      Object.entries(nextQuery).filter(([, value]) => value !== undefined && value !== null && value !== '')
+    )
+  })
 }
 
 async function handleDelete(row) {

@@ -27,10 +27,6 @@
             <artifactId>ruoyi-common</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.ruoyi</groupId>
-            <artifactId>ruoyi-system</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
             <version>7.12.0</version>
@@ -42,18 +38,22 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>1.18.32</version>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
             <groupId>com.dameng</groupId>
             <artifactId>DmJdbcDriver8</artifactId>
             <version>8.1.1.193</version>
             <scope>system</scope>
             <!-- 这里指向上一级目录的 ruoyi-admin/lib -->
             <systemPath>${project.basedir}/../ruoyi-admin/lib/DmJdbcDriver8.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.32</version>
+            <optional>true</optional>
         </dependency>
     </dependencies>
     <build>
@@ -68,5 +68,25 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>with-matlab-engine</id>
+            <activation>
+                <property>
+                    <name>matlab.engine.jar.path</name>
+                </property>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>com.mathworks</groupId>
+                    <artifactId>matlab-engine</artifactId>
+                    <version>R2020a</version>
+                    <scope>system</scope>
+                    <systemPath>${matlab.engine.jar.path}</systemPath>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
 
 </project>

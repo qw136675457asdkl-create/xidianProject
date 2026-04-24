@@ -309,14 +309,19 @@ public class TaskListener implements SmartLifecycle
         deleteFile(directory);
         log.info("Simulation files copied and source directory removed, taskId={}, copiedCount={}",
                 task.getId(), storedFileNames.size());
+        List<TaskDataGroup> taskDataGroupList = new ArrayList<>();
+        for(TaskDataGroup taskDataGroup:task.getDataGroups()){
+            if(taskDataGroup.getEnabled() == true){
+                taskDataGroupList.add(taskDataGroup);
+            }
+        }
 
         iDdataService.syncSimulationResultFiles(
                 task.getExperimentId(),
                 storedFileNames,
                 fileLists,
-                resolveSampleFrequency(task.getDataGroups()),
                 task.getCreateBy(),
-                task.getDataCategorySummary());
+                task.getDataCategorySummary(),taskDataGroupList);
         log.info("Simulation result files synced to database, taskId={}", task.getId());
 
         task.setStatus(TaskStatusEnum.SUCCESS.toString());
@@ -737,7 +742,7 @@ public class TaskListener implements SmartLifecycle
             return;
         }
 
-        SysUser user = sysUserService.selectUserByUserName(task.getCreateBy());
+        SysUser user = sysUserService.selectUserByNickName(task.getCreateBy());
         if (user == null || user.getUserId() == null)
         {
             log.info("Skip task summary notification because user is missing, taskId={}, createBy={}", taskId, task.getCreateBy());
@@ -794,25 +799,6 @@ public class TaskListener implements SmartLifecycle
         {
             throw new ServerException("failed to import file");
         }
-    }
-
-    private Integer resolveSampleFrequency(List<TaskDataGroup> taskDataGroups)
-    {
-        if (taskDataGroups == null || taskDataGroups.isEmpty())
-        {
-            return null;
-        }
-
-        for (TaskDataGroup taskDataGroup : taskDataGroups)
-        {
-            if (taskDataGroup != null
-                    && !Boolean.FALSE.equals(taskDataGroup.getEnabled())
-                    && taskDataGroup.getFrequencyHz() != null)
-            {
-                return taskDataGroup.getFrequencyHz().intValue();
-            }
-        }
-        return null;
     }
 
     private void deleteFile(String path) throws IOException

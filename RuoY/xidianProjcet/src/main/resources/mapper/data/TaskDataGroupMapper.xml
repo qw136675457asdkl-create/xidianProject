@@ -81,5 +81,8 @@
         select * from SYSTEM_COLLABORATION_TEST.TASK_DATA_GROUP where task_id = #{taskId}
         order by case when sort_no is null then 1 else 0 end asc, sort_no asc, start_time_ms asc, id asc
     </select>
-
+    <select id="selectByTaskIdAndEnabled" resultMap="taskDataGroupResultMap">
+        select * from SYSTEM_COLLABORATION_TEST.TASK_DATA_GROUP where task_id = #{taskId} and ENABLED = 1
+        order by case when sort_no is null then 1 else 0 end asc, sort_no asc, start_time_ms asc, id asc
+    </select>
 </mapper>

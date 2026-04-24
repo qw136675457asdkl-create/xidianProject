@@ -10,38 +10,25 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class MatlabCommandUtil {
 
-    /**
-     * 获取可用的MATLAB命令
-     */
     public static String getMatlabCommand(String defaultCommand) {
-        // 不同操作系统MATLAB命令可能不同
-        String os = System.getProperty("os.name").toLowerCase();
-
-        // 尝试使用配置的命令
-        if (isCommandAvailable(defaultCommand)) {
-            return defaultCommand;
+        File resolvedDefault = resolveMatlabExecutable(defaultCommand);
+        if (resolvedDefault != null) {
+            return resolvedDefault.getAbsolutePath();
         }
 
-        // 根据操作系统尝试不同的MATLAB命令
-        if (os.contains("win")) {
-            // Windows系统
-            String[] winCommands = {"matlab", "matlab.exe"};
-            for (String cmd : winCommands) {
-                if (isCommandAvailable(cmd)) {
-                    return cmd;
-                }
-            }
-        } else {
-            // Linux/Mac系统
-            String[] nixCommands = {"matlab", "/usr/local/bin/matlab", "/Applications/MATLAB_R2023b.app/bin/matlab"};
-            for (String cmd : nixCommands) {
-                if (isCommandAvailable(cmd)) {
-                    return cmd;
-                }
+        String os = System.getProperty("os.name", "").toLowerCase();
+        String[] candidates = os.contains("win")
+                ? new String[]{"matlab", "matlab.exe"}
+                : new String[]{"matlab", "/usr/local/bin/matlab", "/Applications/MATLAB_R2023b.app/bin/matlab"};
+
+        for (String candidate : candidates) {
+            File resolved = resolveMatlabExecutable(candidate);
+            if (resolved != null) {
+                return resolved.getAbsolutePath();
             }
         }
 
-        log.warn("未找到可用的MATLAB命令，使用默认命令: {}", defaultCommand);
+        log.warn("No executable MATLAB command was found, keeping configured value: {}", defaultCommand);
         return defaultCommand;
     }
 
@@ -51,21 +38,21 @@ public class MatlabCommandUtil {
         }
 
         File direct = new File(command);
-        if (direct.isFile()) {
-            return direct.getAbsoluteFile();
+        if (direct.isFile() && direct.canExecute()) {
+            try {
+                return direct.getCanonicalFile();
+            } catch (Exception e) {
+                return direct.getAbsoluteFile();
+            }
         }
 
         try {
-            String os = System.getProperty("os.name").toLowerCase();
-            Process process;
-            if (os.contains("win")) {
-                process = Runtime.getRuntime().exec(new String[]{"where", command});
-            } else {
-                process = Runtime.getRuntime().exec(new String[]{"which", command});
-            }
+            String os = System.getProperty("os.name", "").toLowerCase();
+            Process process = os.contains("win")
+                    ? Runtime.getRuntime().exec(new String[]{"where", command})
+                    : Runtime.getRuntime().exec(new String[]{"which", command});
 
-            boolean completed = process.waitFor(5, TimeUnit.SECONDS);
-            if (!completed || process.exitValue() != 0) {
+            if (!process.waitFor(5, TimeUnit.SECONDS) || process.exitValue() != 0) {
                 return null;
             }
 
@@ -74,10 +61,20 @@ public class MatlabCommandUtil {
                 if (line == null || line.trim().isEmpty()) {
                     return null;
                 }
+
                 File resolved = new File(line.trim());
-                return resolved.isFile() ? resolved.getAbsoluteFile() : null;
+                if (!resolved.isFile()) {
+                    return null;
+                }
+
+                try {
+                    return resolved.getCanonicalFile();
+                } catch (Exception e) {
+                    return resolved.getAbsoluteFile();
+                }
             }
         } catch (Exception e) {
+            log.debug("Failed to resolve MATLAB command: {}", command, e);
             return null;
         }
     }
@@ -92,53 +89,6 @@ public class MatlabCommandUtil {
         return binDir == null ? null : binDir.getParentFile();
     }
 
-    /**
-     * 检查命令是否可用
-     */
-    private static boolean isCommandAvailable(String command) {
-        try {
-            String os = System.getProperty("os.name").toLowerCase();
-            Process process;
-
-            if (os.contains("win")) {
-                // Windows使用where命令
-                process = Runtime.getRuntime().exec(new String[]{"where", command});
-            } else {
-                // Linux/Mac使用which命令
-                process = Runtime.getRuntime().exec(new String[]{"which", command});
-            }
-
-            return process.waitFor(5, TimeUnit.SECONDS) && process.exitValue() == 0;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /**
-     * 验证MATLAB环境
-     */
-//    public static boolean validateMatlab() {
-//        String command = getMatlabCommand("matlab");
-//        try {
-//            Process process = Runtime.getRuntime().exec(new String[]{command, "-version"});
-//            boolean completed = process.waitFor(10, TimeUnit.SECONDS);
-//
-//            if (completed && process.exitValue() == 0) {
-//                try (BufferedReader reader = new BufferedReader(
-//                        new InputStreamReader(process.getInputStream()))) {
-//                    String version = reader.readLine();
-//                    log.info("MATLAB环境可用: {}", version);
-//                    return true;
-//                }
-//            }
-//        } catch (Exception e) {
-//            log.warn("MATLAB环境验证失败", e);
-//        }
-//        return false;
-//    }
-
-    // ... existing code ...
-
     public static boolean validateMatlab() {
         String command = getMatlabCommand("matlab");
         try {
@@ -150,24 +100,22 @@ public class MatlabCommandUtil {
             pb.redirectErrorStream(true);
 
             Process process = pb.start();
-            boolean completed = process.waitFor(15, TimeUnit.SECONDS);
+            if (!process.waitFor(15, TimeUnit.SECONDS) || process.exitValue() != 0) {
+                return false;
+            }
 
-            if (completed && process.exitValue() == 0) {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getInputStream()))) {
-                    StringBuilder output = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        output.append(line).append("\n");
-                    }
-                    log.info("MATLAB 环境可用：{}", output.toString().trim());
-                    return true;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                StringBuilder output = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append('\n');
                 }
+                log.info("MATLAB validation output: {}", output.toString().trim());
+                return true;
             }
         } catch (Exception e) {
-            log.warn("MATLAB 环境验证失败", e);
+            log.warn("Failed to validate MATLAB environment", e);
+            return false;
         }
-        return false;
     }
 }
-

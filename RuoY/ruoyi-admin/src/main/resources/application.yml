@@ -7,7 +7,7 @@ ruoyi:
   # 版权年份
   copyrightYear: 2026
   # 文件路径 示例
-  profile: /home/hyy1208
+  profile: /home/hyy12
 
   # 备份目录
   backupDir: /home/hyy1208/backupdata

@@ -2,6 +2,7 @@ package com.ruoyi.Xidian.service.impl;
 
 import com.ruoyi.Xidian.domain.DTO.MatlabCodeRequestDTO;
 import com.ruoyi.Xidian.domain.DTO.MatlabExecutionResultDTO;
+import com.ruoyi.Xidian.domain.DTO.MatlabTaskControlResultDTO;
 import com.ruoyi.Xidian.service.MatlabCodeExecutionService;
 import com.ruoyi.Xidian.service.MatlabExecutionService;
 import lombok.extern.slf4j.Slf4j;
@@ -17,12 +18,13 @@ public class MatlabCodeExecutionServiceImpl implements MatlabCodeExecutionServic
 
     @Override
     public MatlabExecutionResultDTO executeCode(MatlabCodeRequestDTO request) {
-        log.info("业务层开始处理MATLAB代码");
+        log.info("Handling MATLAB code execution request");
+        return matlabExecutionService.executeMatlab(request.getCode());
+    }
 
-        // 调用MATLAB执行服务
-        MatlabExecutionResultDTO result = matlabExecutionService.executeMatlab(request.getCode());
-
-        log.info("业务层处理完成");
-        return result;
+    @Override
+    public MatlabTaskControlResultDTO cancelCurrentTask() {
+        log.info("Handling MATLAB task cancellation request");
+        return matlabExecutionService.cancelCurrentTask();
     }
 }

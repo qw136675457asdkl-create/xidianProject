@@ -10,19 +10,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 通过反射调用 MATLAB Engine for Java，避免工程在没有 engine jar 时无法编译/运行。
- *
- * 复用策略：
- * - 优先连接到已共享的 MATLAB 会话（需要 MATLAB 侧执行 matlab.engine.shareEngine）
- * - 若不存在共享会话，则启动一个 engine 并在进程内复用
+ * Uses reflection so the project can still run in process mode when the MATLAB
+ * Engine jar is not present on the classpath.
  */
 public final class MatlabEngineReuseUtil {
 
     private static final ReentrantLock LOCK = new ReentrantLock(true);
-    private static volatile Object ENGINE; // com.mathworks.engine.MatlabEngine
+    private static volatile Object ENGINE;
     private static volatile boolean NATIVE_READY;
 
-    private MatlabEngineReuseUtil() {}
+    private MatlabEngineReuseUtil() {
+    }
 
     public static boolean isEngineAvailable() {
         try {
@@ -43,13 +41,27 @@ public final class MatlabEngineReuseUtil {
         try {
             locked = LOCK.tryLock(Math.max(1, timeoutSeconds), TimeUnit.SECONDS);
             if (!locked) {
-                return ExecutionResult.fail("MATLAB Engine 预热失败（等待锁超时）", null, System.currentTimeMillis() - startedAt);
+                return ExecutionResult.fail(
+                        "MATLAB Engine warmup timed out while waiting for the shared lock.",
+                        null,
+                        System.currentTimeMillis() - startedAt
+                );
             }
+
             ensureEngine(matlabCommand);
-            return ExecutionResult.ok("MATLAB Engine 已就绪", "", 0, System.currentTimeMillis() - startedAt);
+            return ExecutionResult.ok(
+                    "MATLAB Engine warmed up.",
+                    "",
+                    0,
+                    System.currentTimeMillis() - startedAt
+            );
         } catch (Throwable e) {
             String msg = e.getMessage() == null ? e.toString() : e.getMessage();
-            return ExecutionResult.fail("MATLAB Engine 预热失败：" + msg, null, System.currentTimeMillis() - startedAt);
+            return ExecutionResult.fail(
+                    "MATLAB Engine warmup failed: " + msg,
+                    null,
+                    System.currentTimeMillis() - startedAt
+            );
         } finally {
             if (locked) {
                 LOCK.unlock();
@@ -59,33 +71,32 @@ public final class MatlabEngineReuseUtil {
 
     public static ExecutionResult runCodeWithEngine(String matlabCommand, String code, long timeoutSeconds) {
         Objects.requireNonNull(code, "code");
+
         long startedAt = System.currentTimeMillis();
         boolean locked = false;
         try {
             locked = LOCK.tryLock(Math.max(1, timeoutSeconds), TimeUnit.SECONDS);
             if (!locked) {
-                return ExecutionResult.fail("MATLAB Engine 忙碌中（等待锁超时）", null, System.currentTimeMillis() - startedAt);
+                return ExecutionResult.fail(
+                        "MATLAB Engine is busy and did not become available before timeout.",
+                        null,
+                        System.currentTimeMillis() - startedAt
+                );
             }
 
             Object engine = ensureEngine(matlabCommand);
-
-            // 将代码写入临时 .m，然后用 evalc(run(...)) 捕获 stdout
             File tmp = File.createTempFile("matlab_engine_script_", ".m");
             tmp.deleteOnExit();
             java.nio.file.Files.writeString(tmp.toPath(), code);
 
-            // out = evalc("run('<path>')");
             String path = tmp.getAbsolutePath().replace("\\", "/").replace("'", "''");
-            // MatlabEngine.eval(String) 不返回值；因此用 feval('evalc', ...) 取返回字符串更稳
-            // 反射：engine.feval("evalc", "run('path')")
             Method feval = engine.getClass().getMethod("feval", String.class, Object[].class);
-            Object outObj = feval.invoke(engine, "evalc", new Object[]{ new Object[]{ "run('" + path + "')" } });
+            Object outObj = feval.invoke(engine, "evalc", new Object[]{new Object[]{"run('" + path + "')"}});
             String stdout = outObj == null ? "" : outObj.toString();
 
             return ExecutionResult.ok(stdout, "", 0, System.currentTimeMillis() - startedAt);
-        } catch (InvocationTargetException ite) {
-            // MATLAB 执行错误通常包在 InvocationTargetException 里
-            Throwable root = ite.getTargetException() == null ? ite : ite.getTargetException();
+        } catch (InvocationTargetException e) {
+            Throwable root = e.getTargetException() == null ? e : e.getTargetException();
             String msg = root.getMessage() == null ? root.toString() : root.getMessage();
             return ExecutionResult.fail(msg, null, System.currentTimeMillis() - startedAt);
         } catch (Throwable e) {
@@ -100,15 +111,18 @@ public final class MatlabEngineReuseUtil {
 
     private static Object ensureEngine(String matlabCommand) throws Exception {
         Object cached = ENGINE;
-        if (cached != null) return cached;
+        if (cached != null) {
+            return cached;
+        }
 
         synchronized (MatlabEngineReuseUtil.class) {
-            if (ENGINE != null) return ENGINE;
+            if (ENGINE != null) {
+                return ENGINE;
+            }
 
             ensureNativeLibraries(matlabCommand);
             Class<?> engineClazz = Class.forName("com.mathworks.engine.MatlabEngine");
 
-            // 1) 尝试连接已共享会话
             try {
                 Method findMatlab = engineClazz.getMethod("findMatlab");
                 String[] names = (String[]) findMatlab.invoke(null);
@@ -118,10 +132,9 @@ public final class MatlabEngineReuseUtil {
                     return ENGINE;
                 }
             } catch (NoSuchMethodException ignored) {
-                // 不同版本 engine API 可能没有 findMatlab/connectMatlab，继续尝试 startMatlab
+                // Older engine versions may only expose startMatlab().
             }
 
-            // 2) 启动一个 engine（进程内复用）
             Method startMatlab = engineClazz.getMethod("startMatlab");
             ENGINE = startMatlab.invoke(null);
             return ENGINE;
@@ -143,31 +156,44 @@ public final class MatlabEngineReuseUtil {
                 throw new IllegalStateException("Cannot resolve MATLAB root from command: " + matlabCommand);
             }
 
-            File binWin64 = new File(matlabRoot, "bin/win64");
-            File externBinWin64 = new File(matlabRoot, "extern/bin/win64");
-            File runtimeWin64 = new File(matlabRoot, "runtime/win64");
-
-            appendLibraryPath(binWin64);
-            appendLibraryPath(externBinWin64);
-            appendLibraryPath(runtimeWin64);
-
             if (isWindows()) {
-                preloadWindowsDependencies(runtimeWin64, externBinWin64);
-                loadLibraryIfPresent(new File(binWin64, "nativemvm.dll"));
-                loadLibraryIfPresent(new File(externBinWin64, "libMatlabEngine.dll"));
+                File binDir = new File(matlabRoot, "bin/win64");
+                File externDir = new File(matlabRoot, "extern/bin/win64");
+                File runtimeDir = new File(matlabRoot, "runtime/win64");
+                appendLibraryPath(binDir);
+                appendLibraryPath(externDir);
+                appendLibraryPath(runtimeDir);
+                preloadWindowsDependencies(binDir, externDir, runtimeDir);
+            } else if (isLinux()) {
+                File binDir = new File(matlabRoot, "bin/glnxa64");
+                File externDir = new File(matlabRoot, "extern/bin/glnxa64");
+                File runtimeDir = new File(matlabRoot, "runtime/glnxa64");
+                appendLibraryPath(binDir);
+                appendLibraryPath(externDir);
+                appendLibraryPath(runtimeDir);
+                preloadLinuxDependencies(binDir, externDir, runtimeDir);
             }
 
             NATIVE_READY = true;
         }
     }
 
-    private static void preloadWindowsDependencies(File runtimeWin64, File externBinWin64) {
-        loadLibrariesByPrefix(runtimeWin64, "mclmcrrt");
-        loadLibrariesByPrefix(runtimeWin64, "libMatlabCppSharedLib");
-        loadLibrariesByPrefix(runtimeWin64, "mclcom");
-        loadLibrariesByPrefix(runtimeWin64, "mclxlmain");
-        loadLibraryIfPresent(new File(externBinWin64, "libMatlabDataArray.dll"));
-        loadLibraryIfPresent(new File(externBinWin64, "libMatlabEngine.dll"));
+    private static void preloadWindowsDependencies(File binDir, File externDir, File runtimeDir) {
+        loadLibrariesByPrefix(runtimeDir, "mclmcrrt");
+        loadLibrariesByPrefix(runtimeDir, "libMatlabCppSharedLib");
+        loadLibrariesByPrefix(runtimeDir, "mclcom");
+        loadLibrariesByPrefix(runtimeDir, "mclxlmain");
+        loadLibrariesByPrefix(externDir, "libMatlabDataArray");
+        loadLibrariesByPrefix(externDir, "libMatlabEngine");
+        loadLibrariesByPrefix(binDir, "nativemvm");
+    }
+
+    private static void preloadLinuxDependencies(File binDir, File externDir, File runtimeDir) {
+        loadLibrariesByPrefix(runtimeDir, "libmwmclmcrrt");
+        loadLibrariesByPrefix(runtimeDir, "libMatlabCppSharedLib");
+        loadLibrariesByPrefix(externDir, "libMatlabDataArray");
+        loadLibrariesByPrefix(externDir, "libMatlabEngine");
+        loadLibrariesByPrefix(binDir, "libmwmvm");
     }
 
     private static void loadLibrariesByPrefix(File dir, String prefix) {
@@ -176,12 +202,13 @@ public final class MatlabEngineReuseUtil {
         }
 
         String lowerPrefix = prefix.toLowerCase();
+        String libraryToken = sharedLibraryToken();
         File[] matches = dir.listFiles((ignored, name) -> {
             if (name == null) {
                 return false;
             }
             String lowerName = name.toLowerCase();
-            return lowerName.startsWith(lowerPrefix) && lowerName.endsWith(".dll");
+            return lowerName.startsWith(lowerPrefix) && lowerName.contains(libraryToken);
         });
 
         if (matches == null || matches.length == 0) {
@@ -204,7 +231,10 @@ public final class MatlabEngineReuseUtil {
         String separator = File.pathSeparator;
 
         for (String entry : current.split(java.util.regex.Pattern.quote(separator))) {
-            if (absolutePath.equalsIgnoreCase(entry)) {
+            if (entry == null || entry.isEmpty()) {
+                continue;
+            }
+            if (isWindows() ? absolutePath.equalsIgnoreCase(entry) : absolutePath.equals(entry)) {
                 return;
             }
         }
@@ -228,8 +258,22 @@ public final class MatlabEngineReuseUtil {
         }
     }
 
+    private static String sharedLibraryToken() {
+        if (isWindows()) {
+            return ".dll";
+        }
+        if (isLinux()) {
+            return ".so";
+        }
+        return ".dylib";
+    }
+
     private static boolean isWindows() {
         return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
+    private static boolean isLinux() {
+        return System.getProperty("os.name", "").toLowerCase().contains("linux");
     }
 
     public static final class ExecutionResult {
@@ -256,4 +300,3 @@ public final class MatlabEngineReuseUtil {
         }
     }
 }
-

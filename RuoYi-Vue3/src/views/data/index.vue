@@ -558,6 +558,7 @@ import {
   Close as CloseIcon
 } from '@element-plus/icons-vue'
 import { saveAs } from 'file-saver'
+import { useRoute, useRouter } from 'vue-router'
 import DataQueryPanel from './components/DataQueryPanel.vue'
 import DataTablePanel from './components/DataTablePanel.vue'
 import ComparePreviewDialog from './components/ComparePreviewDialog.vue'
@@ -568,6 +569,9 @@ import TreeEditDrawer from './components/TreeEditDrawer.vue'
 import DataEditDialog from './components/DataEditDialog.vue'
 import DataImportDialog from './components/DataImportDialog.vue'
 import BackupDataDialog from './components/BackupDataDialog.vue'
+const route = useRoute()
+const router = useRouter()
+const AUTO_QUERY_ROUTE_KEYS = ['autoQuery', 'source', 'projectId', 'projectName', 'experimentId', 'experimentName', 'dataFilePath']
 const dateRange = ref([])
 const { proxy } = getCurrentInstance()
 const treeTableOptions = ref(undefined)
@@ -603,6 +607,7 @@ const backupTotal = ref(0)
 const backupList = ref([])
 const backupDateRange = ref([])
 const restoringBackupId = ref(null)
+const dataPageInitialized = ref(false)
 
 // 文件管理器相关状态
 const fileLoading = ref(false)
@@ -816,25 +821,29 @@ const uploadDataRules = {
   isSimulation: [{ required: true, message: "请选择数据类型", trigger: "change" }]
 }
 
+const createDataQueryParams = () => ({
+    id: null,
+    pageNum: 1,
+    pageSize: 10,
+    dataName: undefined,
+    dataFilePath: undefined,
+    experimentId: undefined,
+    experimentName: undefined,
+    projectId: undefined,
+    projectName: undefined,
+    createBy: undefined,
+    isSimulation: undefined,
+    dataType: undefined,
+    startTime: undefined,
+    endTime: undefined,
+    workStatus: undefined,
+    dataCategory: undefined,
+    createTime: undefined,
+})
+
 const data = reactive({
     form: {},
-    queryParams: {
-        id: null,
-        pageNum: 1,
-        pageSize: 10,
-        dataName: undefined,
-        experimentId: undefined,
-        experimentName: undefined,
-        projectId: undefined,
-        createBy: undefined,
-        isSimulation: undefined,
-        dataType: undefined,
-        startTime: undefined,
-        endTime: undefined,
-        workStatus: undefined,
-        dataCategory: undefined,
-        createTime: undefined,
-    },
+    queryParams: createDataQueryParams(),
     rules: {
         dataName: [
             { required: true, message: "数据名称不能为空", trigger: "blur" }
@@ -852,6 +861,89 @@ const data = reactive({
 })
 
 const {queryParams, form, rules} = toRefs(data)
+
+function normalizeRouteQueryText(value) {
+    const rawValue = Array.isArray(value) ? value[value.length - 1] : value
+    const normalizedValue = String(rawValue ?? '').trim()
+    if (!normalizedValue || normalizedValue === 'undefined' || normalizedValue === 'null') {
+        return undefined
+    }
+    return normalizedValue
+}
+
+function resolveProjectIdByName(projectName) {
+    const normalizedProjectName = String(projectName || '').trim()
+    if (!normalizedProjectName) {
+        return undefined
+    }
+
+    const project = projectOptions.value.find(item => String(item?.projectName || '').trim() === normalizedProjectName)
+    return project?.projectId != null ? String(project.projectId) : undefined
+}
+
+function extractAutoQueryFilters(routeQuery = route.query) {
+    if (normalizeRouteQueryText(routeQuery?.autoQuery) !== '1') {
+        return null
+    }
+
+    const projectName = normalizeRouteQueryText(routeQuery?.projectName)
+    const experimentId = normalizeRouteQueryText(routeQuery?.experimentId)
+    const experimentName = normalizeRouteQueryText(routeQuery?.experimentName)
+    const dataFilePath = normalizeRouteQueryText(routeQuery?.dataFilePath)
+
+    if (!projectName || !experimentId || !experimentName || !dataFilePath) {
+        return null
+    }
+
+    return {
+        projectId: normalizeRouteQueryText(routeQuery?.projectId),
+        projectName,
+        experimentId,
+        experimentName,
+        dataFilePath
+    }
+}
+
+function applyAutoQueryFilters(routeQuery = route.query) {
+    const filters = extractAutoQueryFilters(routeQuery)
+    if (!filters) {
+        return false
+    }
+
+    const resolvedProjectId = filters.projectId != null
+      ? String(filters.projectId)
+      : resolveProjectIdByName(filters.projectName)
+
+    queryParams.value = {
+        ...createDataQueryParams(),
+        pageSize: queryParams.value?.pageSize || 10,
+        dataName: String(filters.dataFilePath).replace(/^\/+/, '') || undefined,
+        dataFilePath: filters.dataFilePath,
+        experimentId: filters.experimentId,
+        experimentName: filters.experimentName,
+        projectId: resolvedProjectId,
+        projectName: resolvedProjectId ? undefined : filters.projectName
+    }
+    dateRange.value = []
+    getList()
+    return true
+}
+
+function clearAutoQueryRoute() {
+    if (normalizeRouteQueryText(route.query?.autoQuery) !== '1') {
+        return
+    }
+
+    const nextQuery = { ...route.query }
+    AUTO_QUERY_ROUTE_KEYS.forEach(key => {
+        delete nextQuery[key]
+    })
+    router.replace({
+        path: route.path,
+        query: nextQuery
+    })
+}
+
 const filterNode = (value, data) => {
     if (!value) return true
     return data.label && data.label.indexOf(value) !== -1
@@ -1437,7 +1529,7 @@ function buildTreeInfoForm(row, resData, options = {}) {
     targetType: resData.targetType ?? row.targetType ?? null,
     targetId: resData.targetId ?? row.targetId ?? null,
     type: 'experiment',
-    parentId: resData.projectId ?? row.parentId ?? null,
+    parentId: resData.projectId != null ? String(resData.projectId) : (row.parentId != null ? String(row.parentId) : null),
     path: resData.path ?? row.path ?? null,
     createBy: resData.createBy ?? row.createBy ?? null,
     fullPath: resData.fullPath ?? row.fullPath ?? null,
@@ -1524,6 +1616,7 @@ function submitTreeEdit() {
         submitData.targetId = null
         submitData.targetType = null
       } else {
+        submitData.parentId = submitData.parentId != null && submitData.parentId !== '' ? Number(submitData.parentId) : null
         const target = targetTypeOptions.value.find(item => item.targetId === submitData.targetId)
         submitData.targetType = target ? target.targetType : submitData.targetType
       }
@@ -1581,6 +1674,7 @@ function submitExperimentInfoForm() {
       const submitData = JSON.parse(JSON.stringify(experimentInfoForm))
       submitData.type = 'experiment'
       submitData.startTime = formatDateForSubmit(submitData.startTime)
+      submitData.parentId = submitData.parentId != null && submitData.parentId !== '' ? Number(submitData.parentId) : null
       const target = targetTypeOptions.value.find(item => item.targetId === submitData.targetId)
       submitData.targetType = target ? target.targetType : submitData.targetType
       const formData = buildExperimentInfoFormData(submitData)
@@ -2478,19 +2572,34 @@ watch(detailVisible, visible => {
   handleDetailDialogClosed()
 })
 
+watch(
+  () => route.query,
+  (currentQuery) => {
+    if (!dataPageInitialized.value) {
+      return
+    }
+    applyAutoQueryFilters(currentQuery)
+  },
+  { deep: true }
+)
+
 function handleNodeClick(data) {
     if(data.type==="experiment"){
         queryParams.value.id=undefined
+        queryParams.value.dataFilePath=undefined
         queryParams.value.experimentId=data.experimentId ?? data.id
         queryParams.value.experimentName=data.name ?? data.label
-        queryParams.value.projectId=data.parentId
+        queryParams.value.projectId=data.parentId != null ? String(data.parentId) : undefined
+        queryParams.value.projectName=undefined
     }
     else if(data.type==="project"){
         queryParams.value.id=undefined
+        queryParams.value.dataFilePath=undefined
         queryParams.value.experimentId=undefined
         const project = projectOptions.value.find(item => item.projectId == data.id)
-        queryParams.value.projectId = project ? project.projectId : data.id
+        queryParams.value.projectId = project?.projectId != null ? String(project.projectId) : (data.id != null ? String(data.id) : undefined)
         queryParams.value.experimentName=undefined
+        queryParams.value.projectName=undefined
     }
 
     handleQuery()
@@ -2498,23 +2607,8 @@ function handleNodeClick(data) {
 
 function resetQuery() {
     dateRange.value = []
-    queryParams.value = {
-        id: null,
-        pageNum: 1,
-        pageSize: 10,
-        dataName: undefined,
-        experimentId: undefined,
-        experimentName: undefined,
-        projectId: undefined,
-        createBy: undefined,
-        isSimulation: undefined,
-        dataType: undefined,
-        startTime: undefined,
-        endTime: undefined,
-        workStatus: undefined,
-        dataCategory: undefined,
-        createTime: undefined,
-    }
+    queryParams.value = createDataQueryParams()
+    clearAutoQueryRoute()
     handleQuery()
 }
 
@@ -2669,12 +2763,14 @@ function getList(){
       loading.value = false;
     });
 }
-onMounted(() => {
+onMounted(async () => {
     updateDetailDialogViewport()
     window.addEventListener('resize', updateDetailDialogViewport)
-    getList()
-    getTreeData()
-    getProjects()
+    await Promise.allSettled([getTreeData(), getProjects()])
+    dataPageInitialized.value = true
+    if (!applyAutoQueryFilters(route.query)) {
+      getList()
+    }
 })
 
 onBeforeUnmount(() => {
