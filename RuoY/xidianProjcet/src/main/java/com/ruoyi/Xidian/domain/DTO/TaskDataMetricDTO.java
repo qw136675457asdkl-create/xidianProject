@@ -1,11 +1,18 @@
 package com.ruoyi.Xidian.domain.DTO;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 public class TaskDataMetricDTO {
+    @JsonAlias("field_name")
     private String fieldName;
+    @JsonAlias("data_type")
     private String dataType;
+    @JsonAlias("recommended_value")
     private String recommendedValue;
+    @JsonAlias("fluctuation_range")
     private String fluctuationRange;
     private String description;
+    @JsonAlias("sort_no")
     private Integer sortNo;
 
     public String getFieldName() {

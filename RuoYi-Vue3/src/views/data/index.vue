@@ -1,4 +1,4 @@
-﻿<template>
+﻿﻿<template>
     <div class="app-container data-workspace-page">
         <div class="data-workspace-layout">
             <aside class="workspace-sidebar">
@@ -235,7 +235,7 @@
             :target-type-options="targetTypeOptions"
             :draft-files="businessDraftFiles"
             :progress="businessUploadProgress"
-            :accept="EXPERIMENT_UPLOAD_ACCEPT"
+            :accept="BUSINESS_UPLOAD_ACCEPT"
             :single-upload-name-enabled="businessSingleUploadNameEnabled"
             :format-size="formatExperimentFileSize"
             @submit="submitUpload"
@@ -373,7 +373,7 @@
                     </div>
                 </div>
                 <div v-else-if="isDetailBinaryFile" class="detail-preview__unsupported">
-                    <el-empty :description="detailPreviewMessage || '暂不支持预览二进制文件，请下载后查看'" />
+                    <el-empty :description="detailPreviewMessage || '暂不支持在线预览该文件，请下载后查看'" />
                 </div>
                 <div v-else class="detail-preview__unsupported">
                     <el-empty :description="detailPreviewMessage || '暂不支持在线预览该文件'" />
@@ -524,7 +524,7 @@
                                     </div>
                                 </div>
                                 <div v-else-if="isDetailBinaryFile" class="detail-preview__unsupported">
-                                    <el-empty :description="detailPreviewMessage || '暂不支持预览二进制文件，请下载后查看'" />
+                                    <el-empty :description="detailPreviewMessage || '暂不支持在线预览该文件，请下载后查看'" />
                                 </div>
                                 <div v-else class="detail-preview__unsupported">
                                     <el-empty :description="detailPreviewMessage || '暂不支持在线预览该文件'" />
@@ -571,7 +571,7 @@ import DataImportDialog from './components/DataImportDialog.vue'
 import BackupDataDialog from './components/BackupDataDialog.vue'
 const route = useRoute()
 const router = useRouter()
-const AUTO_QUERY_ROUTE_KEYS = ['autoQuery', 'source', 'projectId', 'projectName', 'experimentId', 'experimentName', 'dataFilePath']
+const AUTO_QUERY_ROUTE_KEYS = ['autoQuery', 'source', 'projectId', 'projectName', 'experimentId', 'experimentName', 'dataName', 'dataFilePath']
 const dateRange = ref([])
 const { proxy } = getCurrentInstance()
 const treeTableOptions = ref(undefined)
@@ -627,8 +627,10 @@ const experimentUploadProgress = reactive({
   text: ''
 })
 const fileManagerPreviewFile = ref(null)
-const EXPERIMENT_UPLOAD_ACCEPT = '.zip,.csv,.xls,.xlsx,.txt,.json,.doc,.docx,.pdf,.bin,.dat,.raw,.png,.jpg,.jpeg,.mp3,.mp4'
-const experimentAllowedExtensions = new Set(['zip', 'csv', 'xls', 'xlsx', 'txt', 'json', 'doc', 'docx', 'pdf', 'bin', 'dat', 'raw','png','jpg','jpeg','mp3','mp4'])
+const EXPERIMENT_UPLOAD_ACCEPT = ''
+const BUSINESS_UPLOAD_ACCEPT = ''
+const FOLDER_UPLOAD_MODE_WHOLE = 'whole'
+const FOLDER_UPLOAD_MODE_EXPANDED = 'expanded'
 let experimentDraftUid = 0
 let businessDraftUid = 0
 
@@ -855,9 +857,6 @@ const data = reactive({
         ],
         dataType: [
             { required: true, message: "数据种类不能为空", trigger: "blur" }
-        ],
-        fileName: [
-            { required: true, message: "文件名称不能为空", trigger: "blur" }
         ]
     }
 })
@@ -891,9 +890,10 @@ function extractAutoQueryFilters(routeQuery = route.query) {
     const projectName = normalizeRouteQueryText(routeQuery?.projectName)
     const experimentId = normalizeRouteQueryText(routeQuery?.experimentId)
     const experimentName = normalizeRouteQueryText(routeQuery?.experimentName)
+    const dataName = normalizeRouteQueryText(routeQuery?.dataName)
     const dataFilePath = normalizeRouteQueryText(routeQuery?.dataFilePath)
 
-    if (!projectName || !experimentId || !experimentName || !dataFilePath) {
+    if (!projectName || !experimentId || !experimentName || (!dataName && !dataFilePath)) {
         return null
     }
 
@@ -902,6 +902,7 @@ function extractAutoQueryFilters(routeQuery = route.query) {
         projectName,
         experimentId,
         experimentName,
+        dataName: dataName || (dataFilePath ? String(dataFilePath).replace(/^\/+/, '') || undefined : undefined),
         dataFilePath
     }
 }
@@ -919,7 +920,7 @@ function applyAutoQueryFilters(routeQuery = route.query) {
     queryParams.value = {
         ...createDataQueryParams(),
         pageSize: queryParams.value?.pageSize || 10,
-        dataName: String(filters.dataFilePath).replace(/^\/+/, '') || undefined,
+        dataName: filters.dataName,
         dataFilePath: filters.dataFilePath,
         experimentId: filters.experimentId,
         experimentName: filters.experimentName,
@@ -1222,7 +1223,11 @@ function getExperimentFileExtension(path) {
 }
 
 function isExperimentFileSupported(path) {
-  return experimentAllowedExtensions.has(getExperimentFileExtension(path))
+  return Boolean(normalizeExperimentUploadPath(path))
+}
+
+function isBusinessFileSupported(path) {
+  return Boolean(normalizeExperimentUploadPath(path))
 }
 
 function buildExperimentDraftKey(rawFile, relativePath) {
@@ -1231,7 +1236,7 @@ function buildExperimentDraftKey(rawFile, relativePath) {
   return `${relativePath}::${size}::${lastModified}`
 }
 
-function createExperimentDraftFile(rawFile, relativePath) {
+function createExperimentDraftFile(rawFile, relativePath, options = {}) {
   experimentDraftUid += 1
   return {
     uid: `experiment-draft-${experimentDraftUid}`,
@@ -1239,7 +1244,9 @@ function createExperimentDraftFile(rawFile, relativePath) {
     size: Number(rawFile?.size) || 0,
     status: 'ready',
     raw: rawFile,
-    relativePath
+    relativePath,
+    folderUploadMode: options.folderUploadMode || '',
+    folderName: options.folderName || ''
   }
 }
 
@@ -1249,7 +1256,54 @@ function summarizeExperimentFileNames(fileNames) {
   return fileNames.length > 3 ? `${previewNames} 等 ${fileNames.length} 项` : previewNames
 }
 
-function addExperimentDraftFiles(rawFiles = []) {
+function resolveFolderNameFromFiles(rawFiles = []) {
+  const folderPath = rawFiles
+    .map(file => normalizeExperimentUploadPath(file?.webkitRelativePath || ''))
+    .find(Boolean)
+  return folderPath ? folderPath.split('/')[0] : ''
+}
+
+function isWholeFolderDraftFiles(files = []) {
+  if (!files.length) return false
+  const folderName = files[0]?.folderName || ''
+  return Boolean(folderName) && files.every(file =>
+    file?.folderUploadMode === FOLDER_UPLOAD_MODE_WHOLE && file?.folderName === folderName
+  )
+}
+
+function getWholeFolderDraftName(files = []) {
+  return isWholeFolderDraftFiles(files) ? files[0].folderName : ''
+}
+
+async function chooseFolderUploadMode(rawFiles = []) {
+  const folderName = resolveFolderNameFromFiles(rawFiles) || '所选文件夹'
+  try {
+    await ElMessageBox.confirm(
+      `“${folderName}”需要如何上传？`,
+      '选择文件夹上传方式',
+      {
+        confirmButtonText: '上传整个文件夹',
+        cancelButtonText: '按目录层级展开上传',
+        distinguishCancelAndClose: true,
+        type: 'info'
+      }
+    )
+    return { folderUploadMode: FOLDER_UPLOAD_MODE_WHOLE, folderName }
+  } catch (action) {
+    if (action === 'cancel') {
+      return { folderUploadMode: FOLDER_UPLOAD_MODE_EXPANDED, folderName }
+    }
+    return null
+  }
+}
+
+function resetFolderInput(event) {
+  if (event?.target) {
+    event.target.value = ''
+  }
+}
+
+function addExperimentDraftFiles(rawFiles = [], options = {}) {
   if (!Array.isArray(rawFiles) || rawFiles.length === 0) return
 
   const existingKeys = new Set(
@@ -1272,14 +1326,14 @@ function addExperimentDraftFiles(rawFiles = []) {
       return
     }
     existingKeys.add(draftKey)
-    nextFiles.push(createExperimentDraftFile(rawFile, relativePath))
+    nextFiles.push(createExperimentDraftFile(rawFile, relativePath, options))
   })
 
   if (nextFiles.length) {
     experimentDraftFiles.value = experimentDraftFiles.value.concat(nextFiles)
   }
   if (invalidFiles.length) {
-    ElMessage.warning(`已跳过不支持的文件：${summarizeExperimentFileNames(invalidFiles)}`)
+    ElMessage.warning(`已跳过路径无效的文件：${summarizeExperimentFileNames(invalidFiles)}`)
   }
   if (duplicateFiles.length) {
     ElMessage.warning(`已忽略重复文件：${summarizeExperimentFileNames(duplicateFiles)}`)
@@ -1288,12 +1342,27 @@ function addExperimentDraftFiles(rawFiles = []) {
 
 function handleExperimentDraftChange(uploadFile) {
   if (!uploadFile?.raw) return
+  if (isWholeFolderDraftFiles(experimentDraftFiles.value)) {
+    clearExperimentDraftFiles()
+  }
   addExperimentDraftFiles([uploadFile.raw])
 }
 
-function handleExperimentFolderChange(event) {
+async function handleExperimentFolderChange(event) {
   const rawFiles = Array.from(event?.target?.files || [])
-  addExperimentDraftFiles(rawFiles)
+  if (!rawFiles.length) {
+    resetFolderInput(event)
+    return
+  }
+
+  const folderOptions = await chooseFolderUploadMode(rawFiles)
+  resetFolderInput(event)
+  if (!folderOptions) return
+
+  if (folderOptions.folderUploadMode === FOLDER_UPLOAD_MODE_WHOLE || isWholeFolderDraftFiles(experimentDraftFiles.value)) {
+    clearExperimentDraftFiles()
+  }
+  addExperimentDraftFiles(rawFiles, folderOptions)
 }
 
 function formatExperimentFileSize(size) {
@@ -1340,7 +1409,7 @@ function setBusinessUploadProgressState({ percentage, status = '', text = '' }) 
   businessUploadProgress.text = text
 }
 
-function createBusinessDraftFile(rawFile, relativePath) {
+function createBusinessDraftFile(rawFile, relativePath, options = {}) {
   businessDraftUid += 1
   return {
     uid: `business-draft-${businessDraftUid}`,
@@ -1348,11 +1417,13 @@ function createBusinessDraftFile(rawFile, relativePath) {
     size: Number(rawFile?.size) || 0,
     status: 'ready',
     raw: rawFile,
-    relativePath
+    relativePath,
+    folderUploadMode: options.folderUploadMode || '',
+    folderName: options.folderName || ''
   }
 }
 
-function addBusinessDraftFiles(rawFiles = []) {
+function addBusinessDraftFiles(rawFiles = [], options = {}) {
   if (!Array.isArray(rawFiles) || rawFiles.length === 0) return
 
   const existingKeys = new Set(
@@ -1365,7 +1436,7 @@ function addBusinessDraftFiles(rawFiles = []) {
   rawFiles.forEach(rawFile => {
     if (!(rawFile instanceof File)) return
     const relativePath = normalizeExperimentUploadPath(rawFile.webkitRelativePath || rawFile.name)
-    if (!relativePath || !isExperimentFileSupported(relativePath)) {
+    if (!relativePath || !isBusinessFileSupported(relativePath)) {
       invalidFiles.push(rawFile.webkitRelativePath || rawFile.name || '未命名文件')
       return
     }
@@ -1375,14 +1446,14 @@ function addBusinessDraftFiles(rawFiles = []) {
       return
     }
     existingKeys.add(draftKey)
-    nextFiles.push(createBusinessDraftFile(rawFile, relativePath))
+    nextFiles.push(createBusinessDraftFile(rawFile, relativePath, options))
   })
 
   if (nextFiles.length) {
     businessDraftFiles.value = businessDraftFiles.value.concat(nextFiles)
   }
   if (invalidFiles.length) {
-    ElMessage.warning(`已跳过不支持的文件：${summarizeExperimentFileNames(invalidFiles)}`)
+    ElMessage.warning(`已跳过路径无效的文件：${summarizeExperimentFileNames(invalidFiles)}`)
   }
   if (duplicateFiles.length) {
     ElMessage.warning(`已忽略重复文件：${summarizeExperimentFileNames(duplicateFiles)}`)
@@ -1391,12 +1462,29 @@ function addBusinessDraftFiles(rawFiles = []) {
 
 function handleBusinessDraftChange(uploadFile) {
   if (!uploadFile?.raw) return
+  if (isWholeFolderDraftFiles(businessDraftFiles.value)) {
+    clearBusinessDraftFiles()
+    uploadDataForm.dataName = ''
+  }
   addBusinessDraftFiles([uploadFile.raw])
 }
 
-function handleBusinessFolderChange(event) {
+async function handleBusinessFolderChange(event) {
   const rawFiles = Array.from(event?.target?.files || [])
-  addBusinessDraftFiles(rawFiles)
+  if (!rawFiles.length) {
+    resetFolderInput(event)
+    return
+  }
+
+  const folderOptions = await chooseFolderUploadMode(rawFiles)
+  resetFolderInput(event)
+  if (!folderOptions) return
+
+  if (folderOptions.folderUploadMode === FOLDER_UPLOAD_MODE_WHOLE || isWholeFolderDraftFiles(businessDraftFiles.value)) {
+    clearBusinessDraftFiles()
+  }
+  uploadDataForm.dataName = folderOptions.folderUploadMode === FOLDER_UPLOAD_MODE_WHOLE ? folderOptions.folderName : ''
+  addBusinessDraftFiles(rawFiles, folderOptions)
 }
 
 function buildExperimentInfoFormData(data) {
@@ -1406,6 +1494,14 @@ function buildExperimentInfoFormData(data) {
     if (value === undefined || value === null || value === '') return
     formData.append(key, value)
   })
+
+  const folderName = getWholeFolderDraftName(experimentDraftFiles.value)
+  if (folderName) {
+    formData.append('folderUploadMode', FOLDER_UPLOAD_MODE_WHOLE)
+    formData.append('folderName', folderName)
+  } else {
+    formData.append('folderUploadMode', FOLDER_UPLOAD_MODE_EXPANDED)
+  }
 
   experimentDraftFiles.value.forEach(file => {
     if (!file?.raw) return
@@ -1424,6 +1520,14 @@ function buildBusinessImportFormData(data, files = []) {
     if (value === undefined || value === null || value === '') return
     formData.append(key, value)
   })
+
+  const folderName = getWholeFolderDraftName(files)
+  if (folderName) {
+    formData.append('folderUploadMode', FOLDER_UPLOAD_MODE_WHOLE)
+    formData.append('folderName', folderName)
+  } else {
+    formData.append('folderUploadMode', FOLDER_UPLOAD_MODE_EXPANDED)
+  }
 
   files.forEach(file => {
     const rawFile = file?.raw
@@ -1734,6 +1838,13 @@ function extractFileSuffix(path) {
   return dotIndex > -1 ? fileName.substring(dotIndex) : ''
 }
 
+function extractFileBaseName(path) {
+  const normalized = normalizeRelativePath(path)
+  const fileName = normalized.substring(normalized.lastIndexOf('/') + 1)
+  const dotIndex = fileName.lastIndexOf('.')
+  return dotIndex > -1 ? fileName.substring(0, dotIndex) : fileName
+}
+
 function extractDirPath(path) {
   const normalized = normalizeRelativePath(path)
   const index = normalized.lastIndexOf('/')
@@ -1830,7 +1941,7 @@ const previewDataFilePath = computed(() => {
   const originalPath = form.value?.dataFilePath
   if (!originalPath) return ''
 
-  const fileName = (form.value?.fileName || '').trim()
+  const fileName = extractFileBaseName(originalPath) || (form.value?.fileName || '').trim()
   if (!fileName) return originalPath
 
   const suffix = currentFileSuffix.value || extractFileSuffix(originalPath)
@@ -2028,13 +2139,11 @@ function isTabularFile(file) {
 }
 
 function isTextPreviewFile(file) {
-  const extension = getPreviewFileExtension(file)
-  return extension === 'txt' || extension === 'json' || extension === 'csv'
+  return false
 }
 
 function isOfficeFile(file) {
-  const extension = getPreviewFileExtension(file)
-  return extension === 'xls' || extension === 'xlsx' || extension === 'doc' || extension === 'docx'
+  return false
 }
 
 function isPdfFile(file) {
@@ -2060,7 +2169,15 @@ function isBinaryFile(file) {
 }
 
 function isDownloadOnlyFile(file) {
-  return isBinaryFile(file)
+  return !isPreviewSupportedFile(file)
+}
+
+function isPreviewSupportedFile(file) {
+  return isTabularFile(file)
+    || isPdfFile(file)
+    || isImageFile(file)
+    || isAudioFile(file)
+    || isVideoFile(file)
 }
 
 function getPreviewMimeType(file) {
@@ -2082,11 +2199,6 @@ function getDetailPreviewTitle(file) {
   const fileLabel = getPreviewFileLabel(file)
 
   if (fileName.endsWith('.csv')) return `CSV文件预览: ${fileLabel}`
-  if (fileName.endsWith('.txt')) return `文本文件预览: ${fileLabel}`
-  if (fileName.endsWith('.json')) return `JSON文件预览: ${fileLabel}`
-  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) return `Excel文件预览: ${fileLabel}`
-  if (fileName.endsWith('.doc') || fileName.endsWith('.docx')) return `Word文件预览: ${fileLabel}`
-  if (isBinaryFile(file)) return `二进制文件下载: ${fileLabel}`
   if (fileName.endsWith('.pdf')) return `PDF文件预览: ${fileLabel}`
   if (isImageFile(file)) return `图片文件预览: ${fileLabel}`
   if (isAudioFile(file)) return `音频文件预览: ${fileLabel}`
@@ -2096,8 +2208,7 @@ function getDetailPreviewTitle(file) {
 
 function resolveComparePreviewType(file) {
   const extension = getPreviewFileExtension(file)
-  if (extension === 'csv' || extension === 'xls' || extension === 'xlsx') return 'table'
-  if (extension === 'txt' || extension === 'json' || extension === 'doc' || extension === 'docx') return 'text'
+  if (extension === 'csv') return 'table'
   if (isPdfFile(file)) return 'pdf'
   if (isImageFile(file)) return 'image'
   if (isAudioFile(file)) return 'audio'
@@ -2619,6 +2730,10 @@ const selectableTreeOptions = computed(() => {
 })
 
 const businessSingleUploadNameEnabled = computed(() => {
+  if (isWholeFolderDraftFiles(businessDraftFiles.value)) {
+    return true
+  }
+
   if (businessDraftFiles.value.length !== 1) {
     return false
   }
@@ -2668,8 +2783,10 @@ const submitUpload = async () => {
     text: `准备上传 ${selectedFiles.length} 个文件...`
   })
   try {
+    const wholeFolderName = getWholeFolderDraftName(selectedFiles)
+    const shouldSubmitDataName = businessSingleUploadNameEnabled.value
     const businessData = {
-      dataName: uploadDataForm.dataName,
+      dataName: shouldSubmitDataName ? (uploadDataForm.dataName || wholeFolderName) : '',
       experimentId: uploadDataForm.experimentId,
       targetId: uploadDataForm.targetId,
       targetType: uploadDataForm.targetType,
@@ -2706,23 +2823,43 @@ const submitUpload = async () => {
 /** 下载详情中的文件 */
 const handleDownloadDetailFile = async (row, options = {}) => {
   const { silent = false } = options
+
   if (!row?.id) {
     if (!silent) ElMessage.warning('缺少下载参数')
     return false
   }
+
   try {
     const data = await downloadData({
       id: row.id,
       experimentId: row?.experimentId,
       dataFilePath: row?.dataFilePath
     })
+
     if (blobValidate(data)) {
-      const fileName = row.fileName || row.name || row.dataName || row?.dataFilePath?.split(/[\\/]/).pop() || 'download'
-      saveAs(new Blob([data]), fileName)
+      let fileName =
+        row.fileName ||
+        row.name ||
+        row.dataName ||
+        row?.dataFilePath?.split(/[\\/]/).pop() ||
+        'download'
+
+      // 如果是文件夹下载，强制补 .zip
+      if (!fileName.toLowerCase().endsWith('.zip')) {
+        fileName += '.zip'
+      }
+
+      saveAs(
+        new Blob([data], { type: 'application/zip' }),
+        fileName
+      )
+
       return true
     }
+
     const resText = await data.text()
     const rspObj = JSON.parse(resText)
+
     if (!silent) ElMessage.error(rspObj.msg || '下载失败')
     return false
   } catch (e) {
@@ -2818,7 +2955,6 @@ function reset() {
     dataName: null,
     isSimulation: null,
     dataType: null,
-    fileName: null,
     startTime: null,
     location: null,
     contentDesc: null
@@ -2872,22 +3008,22 @@ async function handleUpdate(row) {
 /** 提交按钮 */
 function submitForm() {
   const submitData = { ...form.value }
-  const fileName = (submitData.fileName || '').trim()
-  if (!fileName) {
-    ElMessage.warning("文件名称不能为空")
-    return
-  }
-
-  const suffix = currentFileSuffix.value || extractFileSuffix(submitData.dataFilePath || '')
-  let targetDir = extractDirPath(submitData.dataFilePath || '/')
+  const originalPath = submitData.dataFilePath || ''
+  const fileName = extractFileBaseName(originalPath) || (submitData.fileName || '').trim()
+  const suffix = currentFileSuffix.value || extractFileSuffix(originalPath)
+  let targetDir = extractDirPath(originalPath)
 
   if (selectedMovePathNode.value && (selectedMovePathNode.value.type === 'dir' || selectedMovePathNode.value.type === 'experiment')) {
     targetDir = selectedMovePathNode.value.relativePath
     submitData.experimentId = selectedMovePathNode.value.experimentId
   }
 
-  submitData.fileName = fileName
-  submitData.dataFilePath = buildRelativeDataFilePath(targetDir, fileName, suffix)
+  if (fileName) {
+    submitData.fileName = fileName
+    submitData.dataFilePath = buildRelativeDataFilePath(targetDir, fileName, suffix)
+  } else if (originalPath) {
+    submitData.dataFilePath = originalPath
+  }
 
   updatedata(submitData).then(() => {
     proxy.$modal.msgSuccess("修改成功")

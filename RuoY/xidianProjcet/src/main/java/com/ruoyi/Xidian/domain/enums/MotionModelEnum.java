@@ -2,17 +2,22 @@ package com.ruoyi.Xidian.domain.enums;
 
 public enum MotionModelEnum {
 
-    LINEAR("直线模型"),
-    QUADRATIC_CURVE("二次曲线"),
-    CUBIC_CURVE("三次曲线"),
-    RANDOM_CURVE("随机曲线"),
-    POLYLINE_2("二折线"),
-    POLYLINE_3("三折线");
+    STRAIGHT("straight", "直线轨迹"),
+    QUADRATIC("quadratic", "二次曲线轨迹（抛物线形转弯）"),
+    CUBIC("cubic", "三次曲线轨迹（S形转弯）"),
+    TWO_SEGMENT("two_segment", "二折线轨迹（一个折点）"),
+    THREE_SEGMENT("three_segment", "三折线轨迹（两个折点）");
 
+    private final String code;
     private final String desc;
 
-    MotionModelEnum(String desc) {
+    MotionModelEnum(String code, String desc) {
+        this.code = code;
         this.desc = desc;
+    }
+
+    public String getCode() {
+        return code;
     }
 
     public String getDesc() {

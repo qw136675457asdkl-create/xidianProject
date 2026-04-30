@@ -8,7 +8,7 @@
               <el-input
                 v-model="formModel.dataName"
                 :disabled="draftFiles.length > 0 && !singleUploadNameEnabled"
-                :placeholder="draftFiles.length === 0 || singleUploadNameEnabled ? '为空则使用文件名' : '批量、文件夹或 ZIP 上传时按实际文件名入库'"
+                :placeholder="draftFiles.length === 0 || singleUploadNameEnabled ? '为空则使用文件名/文件夹名' : '批量或展开上传时按实际文件名入库'"
               />
             </el-form-item>
           </el-col>
@@ -71,9 +71,9 @@
         :accept="accept"
         :draft-files="draftFiles"
         :progress="progress"
-        alert-title="支持上传单个文件、多个文件、文件夹和 ZIP 压缩包；文件夹结构会保留，ZIP 会自动解压到当前试验目录。批量、文件夹和 ZIP 解压场景下将按实际文件名入库。"
+        alert-title="支持上传单个文件、多个文件和文件夹；选择文件夹后可上传整个文件夹或按目录层级展开上传。"
         drop-text="拖拽导入文件到此处，或"
-        tip-text="支持 ZIP、CSV、Excel、TXT、JSON、Word、PDF、BIN、DAT、RAW、PNG、JPG、JPEG、MP3、MP4；如需上传整个文件夹，请使用下方“选择文件夹”。"
+        tip-text="支持上传任意类型文件；整个文件夹上传时数据名称默认使用文件夹名称，展开上传时按原文件名入库。"
         :count-text="`已选择 ${draftFiles.length} 个待上传文件`"
         :format-size="formatSize"
         @draft-change="file => emit('draft-change', file)"

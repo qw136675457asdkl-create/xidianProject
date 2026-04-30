@@ -43,15 +43,18 @@
       <div class="experiment-upload__progress-text">{{ progress.text }}</div>
       <el-progress :percentage="progress.percentage" :status="progress.status" :stroke-width="10" />
     </div>
-    <div v-if="draftFiles.length" class="experiment-upload__list">
-      <div v-for="file in draftFiles" :key="file.uid" class="experiment-upload__list-item">
+    <div v-if="visibleDraftFiles.length" class="experiment-upload__list">
+      <div v-for="file in visibleDraftFiles" :key="file.uid" class="experiment-upload__list-item">
         <div class="experiment-upload__list-main">
-          <el-icon class="experiment-upload__list-icon"><ElIconDocument /></el-icon>
+          <el-icon class="experiment-upload__list-icon">
+            <ElIconFolder v-if="file.isFolderSummary" />
+            <ElIconDocument v-else />
+          </el-icon>
           <span class="experiment-upload__list-name" :title="file.name">{{ file.name }}</span>
         </div>
         <div class="experiment-upload__list-side">
           <span class="experiment-upload__list-size">{{ formatSize(file.size) }}</span>
-          <el-button link type="danger" :disabled="disabled" @click="emit('remove-file', file.uid)">移除</el-button>
+          <el-button link type="danger" :disabled="disabled" @click="removeVisibleFile(file)">移除</el-button>
         </div>
       </div>
     </div>
@@ -59,10 +62,10 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { UploadFilled, Folder as ElIconFolder, Document as ElIconDocument } from '@element-plus/icons-vue'
 
-defineProps({
+const props = defineProps({
   disabled: {
     type: Boolean,
     default: false
@@ -105,6 +108,23 @@ const emit = defineEmits(['draft-change', 'folder-change', 'clear-files', 'remov
 
 const uploadRef = ref(null)
 const folderInputRef = ref(null)
+const visibleDraftFiles = computed(() => {
+  const files = props.draftFiles || []
+  if (!files.length) return []
+
+  const folderName = files[0]?.folderName || ''
+  const isWholeFolder = Boolean(folderName) && files.every(file =>
+    file?.folderUploadMode === 'whole' && file?.folderName === folderName
+  )
+  if (!isWholeFolder) return files
+
+  return [{
+    uid: `folder-summary-${folderName}`,
+    name: folderName,
+    size: files.reduce((sum, file) => sum + (Number(file?.size) || 0), 0),
+    isFolderSummary: true
+  }]
+})
 
 function openFolderPicker() {
   folderInputRef.value?.click()
@@ -116,6 +136,14 @@ function clearFiles() {
     folderInputRef.value.value = ''
   }
   emit('clear-files')
+}
+
+function removeVisibleFile(file) {
+  if (file?.isFolderSummary) {
+    clearFiles()
+    return
+  }
+  emit('remove-file', file.uid)
 }
 
 function resetPanel() {

@@ -30,6 +30,7 @@
         </el-table-column>
         <el-table-column label="所属试验" align="center" prop="experimentName" min-width="170" :show-overflow-tooltip="true" />
         <el-table-column label="所属项目" align="center" prop="projectName" min-width="170" :show-overflow-tooltip="true" />
+        <el-table-column label="文件大小" align="center" prop="fileSize" min-width="150" />
         <el-table-column label="试验目标" align="center" prop="targetType" min-width="170" :show-overflow-tooltip="true" />
         <el-table-column label="试验时间" align="center" prop="startTime" min-width="150">
           <template #default="scope">

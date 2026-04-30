@@ -116,6 +116,9 @@ public class TaskToPy implements Serializable {
         @JsonProperty("friendly_num")
         private Integer friendlyNum;
 
+        @JsonProperty("variables")
+        private Map<String, VariableConfig> variables = new LinkedHashMap<>();
+
         public Boolean getEnabled() {
             return enabled;
         }
@@ -178,6 +181,74 @@ public class TaskToPy implements Serializable {
 
         public void setFriendlyNum(Integer friendlyNum) {
             this.friendlyNum = friendlyNum;
+        }
+
+        public Map<String, VariableConfig> getVariables() {
+            return variables;
+        }
+
+        public void setVariables(Map<String, VariableConfig> variables) {
+            this.variables = variables == null ? new LinkedHashMap<>() : variables;
+        }
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class VariableConfig implements Serializable {
+        private static final long serialVersionUID = 1L;
+
+        @JsonProperty("data_type")
+        private String dataType;
+
+        @JsonProperty("recommended_value")
+        private String recommendedValue;
+
+        @JsonProperty("fluctuation_range")
+        private String fluctuationRange;
+
+        @JsonProperty("description")
+        private String description;
+
+        @JsonProperty("sort_no")
+        private Integer sortNo;
+
+        public String getDataType() {
+            return dataType;
+        }
+
+        public void setDataType(String dataType) {
+            this.dataType = dataType;
+        }
+
+        public String getRecommendedValue() {
+            return recommendedValue;
+        }
+
+        public void setRecommendedValue(String recommendedValue) {
+            this.recommendedValue = recommendedValue;
+        }
+
+        public String getFluctuationRange() {
+            return fluctuationRange;
+        }
+
+        public void setFluctuationRange(String fluctuationRange) {
+            this.fluctuationRange = fluctuationRange;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public void setDescription(String description) {
+            this.description = description;
+        }
+
+        public Integer getSortNo() {
+            return sortNo;
+        }
+
+        public void setSortNo(Integer sortNo) {
+            this.sortNo = sortNo;
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.ruoyi.Xidian.domain.DTO;
 
 import java.util.List;
+import java.util.Map;
 
 public class TaskDataGroupDTO {
     private String groupCode;
@@ -8,6 +9,7 @@ public class TaskDataGroupDTO {
     private Integer sortNo;
     private Boolean enabled;
     private List<TaskDataItemDTO> items;
+    private Map<String, TaskDataMetricDTO> variables;
 
     public String getGroupCode() {
         return groupCode;
@@ -38,5 +40,11 @@ public class TaskDataGroupDTO {
     }
     public void setItems(List<TaskDataItemDTO> items) {
         this.items = items;
+    }
+    public Map<String, TaskDataMetricDTO> getVariables() {
+        return variables;
+    }
+    public void setVariables(Map<String, TaskDataMetricDTO> variables) {
+        this.variables = variables;
     }
 }

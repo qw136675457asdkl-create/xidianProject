@@ -5,6 +5,7 @@ import com.ruoyi.Xidian.domain.Vector3;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 public class TaskDataItemDTO {
     private String dataName;
@@ -20,6 +21,7 @@ public class TaskDataItemDTO {
     private Vector3 startVelocity;
     private Attitude startAttitude;
     private List<TaskDataMetricDTO> metrics;
+    private Map<String, TaskDataMetricDTO> variables;
 
     public String getDataName() {
         return dataName;
@@ -98,5 +100,11 @@ public class TaskDataItemDTO {
     }
     public void setMetrics(List<TaskDataMetricDTO> metrics) {
         this.metrics = metrics;
+    }
+    public Map<String, TaskDataMetricDTO> getVariables() {
+        return variables;
+    }
+    public void setVariables(Map<String, TaskDataMetricDTO> variables) {
+        this.variables = variables;
     }
 }

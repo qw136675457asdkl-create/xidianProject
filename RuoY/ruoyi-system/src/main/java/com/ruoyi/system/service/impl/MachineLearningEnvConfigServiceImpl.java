@@ -39,10 +39,10 @@ public class MachineLearningEnvConfigServiceImpl implements IMachineLearningEnvC
     private static MachineLearningEnvConfigDTO defaultConfig()
     {
         MachineLearningEnvConfigDTO dto = new MachineLearningEnvConfigDTO();
-        dto.setField119(null);
-        dto.setField104(null);
+        dto.setField119("/usr/local/python313/bin/python3.13");
+        dto.setField104("Python 3.13");
         dto.setField105(Arrays.asList("配置完成后自动安装常用机器学习库（numpy、pandas、scikit-learn等）"));
-        dto.setField107(null);
+        dto.setField107(1);
         dto.setField108(Arrays.asList("使用独立虚拟环境（venv/conda）"));
         dto.setField109(null);
         dto.setField111(Arrays.asList("若路径不存在，自动创建虚拟环境"));
@@ -50,8 +50,8 @@ public class MachineLearningEnvConfigServiceImpl implements IMachineLearningEnvC
         dto.setField113(Collections.emptyList());
         dto.setField114(Arrays.asList("保存配置后，自动验证Python环境是否可用"));
         dto.setField115(Arrays.asList("生成环境配置日志文件（便于排查问题）"));
-        dto.setField124(null);
-        dto.setField125(null);
+        dto.setField124("/usr/local/MATLAB/R2024A/bin/matlab");
+        dto.setField125("R2024A");
         dto.setField126(Arrays.asList("启用Matlab Engine API for Python（支持Python调用Matlab函数）"));
         dto.setField127(Collections.emptyList());
         dto.setField128(Arrays.asList("关闭软件时自动清理Matlab临时缓存文件"));

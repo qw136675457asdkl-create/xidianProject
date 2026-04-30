@@ -133,6 +133,10 @@ public class TaskDataGroup implements Serializable {
         return metrics;
     }
 
+    public void setMetrics(List<TaskDataMetric> metrics) {
+        this.metrics = metrics;
+    }
+
     public void setMetric(List<TaskDataMetric> metrics) {
         this.metrics = metrics;
     }

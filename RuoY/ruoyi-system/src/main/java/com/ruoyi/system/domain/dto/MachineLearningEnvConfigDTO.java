@@ -11,7 +11,7 @@ public class MachineLearningEnvConfigDTO implements Serializable
     private static final long serialVersionUID = 1L;
 
     private String field119;
-    private Integer field104;
+    private String field104;
     private List<String> field105;
     private Integer field107;
     private List<String> field108;
@@ -22,7 +22,7 @@ public class MachineLearningEnvConfigDTO implements Serializable
     private List<String> field114;
     private List<String> field115;
     private String field124;
-    private Integer field125;
+    private String field125;
     private List<String> field126;
     private List<String> field127;
     private List<String> field128;
@@ -39,12 +39,12 @@ public class MachineLearningEnvConfigDTO implements Serializable
         this.field119 = field119;
     }
 
-    public Integer getField104()
+    public String getField104()
     {
         return field104;
     }
 
-    public void setField104(Integer field104)
+    public void setField104(String field104)
     {
         this.field104 = field104;
     }
@@ -149,12 +149,12 @@ public class MachineLearningEnvConfigDTO implements Serializable
         this.field124 = field124;
     }
 
-    public Integer getField125()
+    public String getField125()
     {
         return field125;
     }
 
-    public void setField125(Integer field125)
+    public void setField125(String field125)
     {
         this.field125 = field125;
     }

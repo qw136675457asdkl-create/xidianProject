@@ -2,8 +2,11 @@ package com.ruoyi.Xidian.controller;
 
 import com.ruoyi.Xidian.domain.DExperimentInfo;
 import com.ruoyi.Xidian.domain.DProjectInfo;
+import com.ruoyi.Xidian.domain.DdataInfo;
 import com.ruoyi.Xidian.domain.TreeTable;
+import com.ruoyi.Xidian.domain.UploadedFileInfo;
 import com.ruoyi.Xidian.domain.VO.TreeTableVo;
+import com.ruoyi.Xidian.service.FileStorageService;
 import com.ruoyi.Xidian.service.IDExperimentInfoService;
 import com.ruoyi.Xidian.service.IDProjectInfoService;
 import com.ruoyi.Xidian.service.IDTargetInfoService;
@@ -15,9 +18,12 @@ import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.exception.ServiceException;
+import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.uuid.UUID;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -33,10 +39,13 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/data/info")
 public class DExperimentInfoController extends BaseController
 {
+    private static final String FOLDER_UPLOAD_MODE_WHOLE = "whole";
+
     @Autowired
     private IDExperimentInfoService dExperimentInfoService;
 
@@ -48,6 +57,9 @@ public class DExperimentInfoController extends BaseController
 
     @Autowired
     private IDdataService ddataService;
+
+    @Autowired
+    private FileStorageService fileStorageService;
 
     //@PreAuthorize("@ss.hasPermi('data:info:list')")
     @GetMapping("/tree")
@@ -126,11 +138,14 @@ public class DExperimentInfoController extends BaseController
     }
     @PreAuthorize("@ss.hasPermi('data:info:addExperiment')")
     @Log(title = "新增试验信息", businessType = BusinessType.INSERT)
+    @Transactional(rollbackFor = Exception.class)
     @PostMapping("/experiment")
     public AjaxResult addExperiment(
             @ModelAttribute TreeTable treeTableVo,
             @RequestParam(value = "files", required = false) List<MultipartFile> files,
-            @RequestParam(value = "relativePaths", required = false) List<String> relativePaths)
+            @RequestParam(value = "relativePaths", required = false) List<String> relativePaths,
+            @RequestParam(value = "folderUploadMode", required = false) String folderUploadMode,
+            @RequestParam(value = "folderName", required = false) String folderName)
     {
         validateInfoType(treeTableVo.getType());
         AjaxResult ajax = AjaxResult.success();
@@ -148,9 +163,15 @@ public class DExperimentInfoController extends BaseController
             dExperimentInfo.setPath(treeTableVo.getPath());
             try
             {
-                ajax.put(AjaxResult.DATA_TAG, dExperimentInfoService.insertDExperimentInfo(dExperimentInfo));
-                //将文件上传到服务器
-                ddataService.uploadFiles(files, dExperimentInfo.getExperimentId());
+                String insertResult = dExperimentInfoService.insertDExperimentInfo(dExperimentInfo);
+                if (insertResult != null && !insertResult.trim().isEmpty())
+                {
+                    return AjaxResult.error(insertResult);
+                }
+                ajax.put(AjaxResult.DATA_TAG, insertResult);
+                // Reuse the same MinIO upload and data-relation import flow as business data.
+                Integer importedCount = importExperimentDataFiles(files, relativePaths, dExperimentInfo, folderUploadMode, folderName);
+                ajax.put("importedCount", importedCount);
             }
             catch (Exception e)
             {
@@ -160,6 +181,97 @@ public class DExperimentInfoController extends BaseController
             return AjaxResult.error("新增试验信息失败");
         }
         return ajax;
+    }
+
+    private Integer importExperimentDataFiles(
+            List<MultipartFile> files,
+            List<String> relativePaths,
+            DExperimentInfo dExperimentInfo,
+            String folderUploadMode,
+            String folderName)
+    {
+        if (files == null || files.isEmpty())
+        {
+            return 0;
+        }
+
+        List<MultipartFile> validFiles = new ArrayList<>();
+        List<String> validRelativePaths = new ArrayList<>();
+        for (int index = 0; index < files.size(); index++)
+        {
+            MultipartFile file = files.get(index);
+            if (file == null || file.isEmpty())
+            {
+                continue;
+            }
+            validFiles.add(file);
+            validRelativePaths.add(relativePaths != null && index < relativePaths.size() ? relativePaths.get(index) : null);
+        }
+
+        if (validFiles.isEmpty())
+        {
+            throw new ServiceException("请选择有效文件");
+        }
+
+        Long userId = SecurityUtils.getUserId();
+        boolean wholeFolderUpload = isWholeFolderUpload(folderUploadMode);
+        String folderUploadId = wholeFolderUpload ? UUID.randomUUID().toString().replace("-", "") : null;
+        List<UploadedFileInfo> uploadedFileInfoList = new ArrayList<>();
+        for (int index = 0; index < validFiles.size(); index++)
+        {
+            MultipartFile multipartFile = validFiles.get(index);
+            String uploadFilename = resolveUploadFilename(multipartFile, validRelativePaths.get(index));
+            UploadedFileInfo uploadedFileInfo = new UploadedFileInfo();
+            try
+            {
+                String objectName = wholeFolderUpload
+                        ? fileStorageService.uploadFolderFile(multipartFile, userId, folderName, uploadFilename, folderUploadId)
+                        : fileStorageService.upload(multipartFile, userId);
+                uploadedFileInfo.setObjectName(objectName);
+                uploadedFileInfo.setOriginalFilename(uploadFilename);
+                uploadedFileInfo.setContentType(multipartFile.getContentType());
+                uploadedFileInfo.setSize(multipartFile.getSize());
+                uploadedFileInfoList.add(uploadedFileInfo);
+            }
+            catch (RuntimeException e)
+            {
+                log.error("试验数据文件上传失败: {}", uploadFilename, e);
+            }
+        }
+
+        if (uploadedFileInfoList.isEmpty())
+        {
+            throw new ServiceException("文件全部上传失败");
+        }
+
+        DdataInfo importDataInfo = buildExperimentImportDataInfo(dExperimentInfo);
+        return wholeFolderUpload
+                ? ddataService.insertFolderDdataInfoByObjectNames(importDataInfo, uploadedFileInfoList, folderName)
+                : ddataService.insertDdataInfosByObjectNames(importDataInfo, uploadedFileInfoList);
+    }
+
+    private boolean isWholeFolderUpload(String folderUploadMode)
+    {
+        return FOLDER_UPLOAD_MODE_WHOLE.equalsIgnoreCase(folderUploadMode == null ? "" : folderUploadMode.trim());
+    }
+
+    private DdataInfo buildExperimentImportDataInfo(DExperimentInfo dExperimentInfo)
+    {
+        DdataInfo ddataInfo = new DdataInfo();
+        ddataInfo.setExperimentId(dExperimentInfo.getExperimentId());
+        ddataInfo.setTargetId(dExperimentInfo.getTargetId());
+        ddataInfo.setTargetType(dExperimentInfo.getTargetType());
+        ddataInfo.setIsSimulation(Boolean.TRUE);
+        return ddataInfo;
+    }
+
+    private String resolveUploadFilename(MultipartFile multipartFile, String relativePath)
+    {
+        if (relativePath != null && !relativePath.trim().isEmpty())
+        {
+            return relativePath.trim();
+        }
+        return multipartFile.getOriginalFilename();
     }
 
     @PreAuthorize("@ss.hasPermi('data:info:edit')")

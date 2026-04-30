@@ -1,18 +1,32 @@
 package com.ruoyi.Xidian.domain;
 
 import java.io.Serializable;
-import java.math.BigDecimal;
-
-//字段说明
 public class TaskDataMetric implements Serializable {
     private static final long serialVersionUID = 1L;
-    // 这一行数据的ID
+    private Long id;
+    private Long taskDataGroupId;
     private String fieldName;
     private String dataType;
     private String recommendedValue;
     private String fluctuationRange;
     private String description;
     private Integer sortNo;
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public Long getTaskDataGroupId() {
+        return taskDataGroupId;
+    }
+
+    public void setTaskDataGroupId(Long taskDataGroupId) {
+        this.taskDataGroupId = taskDataGroupId;
+    }
 
     public String getFieldName() {
         return fieldName;

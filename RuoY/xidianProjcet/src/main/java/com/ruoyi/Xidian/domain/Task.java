@@ -1,6 +1,7 @@
 package com.ruoyi.Xidian.domain;
 
 import com.ruoyi.common.core.domain.BaseEntity;
+import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +22,7 @@ public class Task extends BaseEntity {
     private String targetType;
     private String status;
     private String path;
+    @Setter
     private Long createUserId;
     private List<TaskDataGroup> dataGroups = new ArrayList<>();
     private List<TaskDataGroup> requestDataGroups = new ArrayList<>();
@@ -169,9 +171,6 @@ public class Task extends BaseEntity {
         this.requestDataGroups = requestDataGroups == null ? new ArrayList<>() : requestDataGroups;
     }
 
-    public void setCreateUserId(Long createUserId){
-        this.createUserId = createUserId;
-    }
     public Long getCreateUserID(){
         return createUserId;
     }

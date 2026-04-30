@@ -579,7 +579,8 @@ function getBaseModuleUrl() {
 function handleView(row) {
   const baseUrl = getBaseModuleUrl()
   const separator = baseUrl.includes('?') ? '&' : '?'
-  moduleUrl.value = baseUrl ? `${baseUrl}${separator}instanceId=${row.experimentId}&type=ex` : ''
+  //moduleUrl.value = baseUrl ? `${baseUrl}${separator}instanceId=${row.experimentId}&type=ex` : ''
+  moduleUrl.value = `http://10.1.22.71:8089/#/dataDisplay?instanceId=${row.experimentId}&type=ex`
   activePreviewName.value = row.experimentName || `试验 ${row.experimentId || ''}`.trim()
   initializeDialogWindow()
   dialogMode.value = 'large'

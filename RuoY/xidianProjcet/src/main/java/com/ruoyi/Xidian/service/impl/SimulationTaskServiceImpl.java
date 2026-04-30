@@ -10,6 +10,7 @@ import com.ruoyi.Xidian.domain.TaskDataMetric;
 import com.ruoyi.Xidian.domain.enums.TaskStatusEnum;
 import com.ruoyi.Xidian.mapper.DdataMapper;
 import com.ruoyi.Xidian.mapper.TaskDataGroupMapper;
+import com.ruoyi.Xidian.mapper.TaskDataMetricMapper;
 import com.ruoyi.Xidian.mapper.TaskMapper;
 import com.ruoyi.Xidian.service.SimulationTaskService;
 import com.ruoyi.Xidian.service.SimulationTaskStreamQueue;
@@ -20,12 +21,18 @@ import com.ruoyi.common.utils.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.Collections;
 import java.util.stream.Collectors;
 
 @Service
@@ -35,6 +42,7 @@ public class SimulationTaskServiceImpl implements SimulationTaskService
 
     private final TaskMapper taskMapper;
     private final TaskDataGroupMapper taskDataGroupMapper;
+    private final TaskDataMetricMapper taskDataMetricMapper;
     private final DExperimentInfoServiceImpl dExperimentInfoService;
     private final SimulationTaskStreamQueue simulationTaskStreamQueue;
     private final DdataMapper dataMapper;
@@ -42,6 +50,7 @@ public class SimulationTaskServiceImpl implements SimulationTaskService
     public SimulationTaskServiceImpl(
             TaskMapper taskMapper,
             TaskDataGroupMapper taskDataGroupMapper,
+            TaskDataMetricMapper taskDataMetricMapper,
             DExperimentInfoServiceImpl dExperimentInfoService,
             SimulationTaskStreamQueue simulationTaskStreamQueue,
             DdataMapper dataMapper
@@ -49,6 +58,7 @@ public class SimulationTaskServiceImpl implements SimulationTaskService
     {
         this.taskMapper = taskMapper;
         this.taskDataGroupMapper = taskDataGroupMapper;
+        this.taskDataMetricMapper = taskDataMetricMapper;
         this.dExperimentInfoService = dExperimentInfoService;
         this.simulationTaskStreamQueue = simulationTaskStreamQueue;
         this.dataMapper = dataMapper;
@@ -61,6 +71,7 @@ public class SimulationTaskServiceImpl implements SimulationTaskService
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Task insert(TaskCreateRequest request)
     {
         log.info("Start creating simulation task, taskName={}, experimentId={}, testId={}",
@@ -106,12 +117,12 @@ public class SimulationTaskServiceImpl implements SimulationTaskService
             }
         }
 
-        taskDataGroupMapper.batchInsert(subTasks);
-        log.info("Sub tasks batch inserted, taskId={}, subTaskCount={}", task.getId(), subTasks.size());
-        task.setDataGroups(subTasks);
-        simulationTaskStreamQueue.enqueue(task);
-        log.info("Simulation task sent to redis stream, taskId={}, streamKey={}",
-                task.getId(), simulationTaskStreamQueue.getTaskStreamKey());
+        List<TaskDataGroup> enabledSubTasks = filterEnabledSubTasks(subTasks);
+        insertSubTasksWithMetrics(enabledSubTasks);
+        log.info("Enabled sub tasks inserted, taskId={}, totalSubTaskCount={}, enabledSubTaskCount={}",
+                task.getId(), subTasks.size(), enabledSubTasks.size());
+        task.setDataGroups(enabledSubTasks);
+        enqueueAfterCommit(task);
         return task;
     }
 
@@ -129,7 +140,9 @@ public class SimulationTaskServiceImpl implements SimulationTaskService
         {
             throw new ServiceException("task does not exist");
         }
-        task.setDataGroups(taskDataGroupMapper.selectByTaskIdAndEnabled(id));
+        List<TaskDataGroup> dataGroups = taskDataGroupMapper.selectByTaskIdAndEnabled(id);
+        fillMetrics(dataGroups);
+        task.setDataGroups(dataGroups);
         for(TaskDataGroup taskDataGroup: task.getDataGroups()){
             taskDataGroup.setStatus(task.getStatus());
         }
@@ -137,8 +150,10 @@ public class SimulationTaskServiceImpl implements SimulationTaskService
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void deleteTask(Long id)
     {
+        taskDataMetricMapper.deleteByTaskId(id);
         taskDataGroupMapper.deleteByTaskId(id);
         taskMapper.deleteById(id);
     }
@@ -214,6 +229,7 @@ public class SimulationTaskServiceImpl implements SimulationTaskService
         {
             group.setDataName(groupDTO.getGroupName());
             group.setIsSimulation(Boolean.TRUE);
+            group.setMetrics(buildMetrics(groupDTO, null));
             return group;
         }
         group.setDataName(StringUtils.isNotEmpty(itemDTO.getDataName()) ? itemDTO.getDataName() : groupDTO.getGroupName());
@@ -226,8 +242,64 @@ public class SimulationTaskServiceImpl implements SimulationTaskService
         group.setFrequencyHz(itemDTO.getFrequencyHz());
         group.setTargetNum(itemDTO.getTargetNum());
         group.setIsSimulation(resolveSimulationFlag(itemDTO.getDataSourceType()));
-        group.setMetric(buildMetrics(itemDTO.getMetrics()));
+        group.setMetrics(buildMetrics(groupDTO, itemDTO));
         return group;
+    }
+
+    private void insertSubTasksWithMetrics(List<TaskDataGroup> subTasks)
+    {
+        for (TaskDataGroup group : subTasks)
+        {
+            taskDataGroupMapper.insert(group);
+            persistMetrics(group);
+        }
+    }
+
+    private List<TaskDataGroup> filterEnabledSubTasks(List<TaskDataGroup> subTasks)
+    {
+        return defaultIfNull(subTasks).stream()
+                .filter(group -> Boolean.TRUE.equals(group.getEnabled()))
+                .collect(Collectors.toList());
+    }
+
+    private void persistMetrics(TaskDataGroup group)
+    {
+        List<TaskDataMetric> metrics = group == null ? null : group.getMetrics();
+        if (metrics == null || metrics.isEmpty())
+        {
+            return;
+        }
+
+        for (TaskDataMetric metric : metrics)
+        {
+            metric.setTaskDataGroupId(group.getId());
+        }
+        taskDataMetricMapper.batchInsert(metrics);
+    }
+
+    private void enqueueAfterCommit(Task task)
+    {
+        if (TransactionSynchronizationManager.isSynchronizationActive())
+        {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization()
+            {
+                @Override
+                public void afterCommit()
+                {
+                    enqueueTask(task);
+                }
+            });
+            return;
+        }
+
+        enqueueTask(task);
+    }
+
+    private void enqueueTask(Task task)
+    {
+        simulationTaskStreamQueue.enqueue(task);
+        log.info("Simulation task sent to redis stream, taskId={}, streamKey={}",
+                task.getId(), simulationTaskStreamQueue.getTaskStreamKey());
     }
 
     private Boolean resolveSimulationFlag(String dataSourceType)
@@ -235,21 +307,78 @@ public class SimulationTaskServiceImpl implements SimulationTaskService
         return !Objects.equals("existing", StringUtils.isEmpty(dataSourceType) ? null : dataSourceType.trim().toLowerCase());
     }
 
-    private List<TaskDataMetric> buildMetrics(List<TaskDataMetricDTO> metricDTOs)
+    private List<TaskDataMetric> buildMetrics(TaskDataGroupDTO groupDTO, TaskDataItemDTO itemDTO)
     {
-        List<TaskDataMetric> metrics = new ArrayList<>();
-        for (TaskDataMetricDTO metricDTO : defaultIfNull(metricDTOs))
+        Map<String, TaskDataMetric> metrics = new LinkedHashMap<>();
+        if (groupDTO.getVariables() != null)
         {
-            TaskDataMetric metric = new TaskDataMetric();
-            metric.setFieldName(metricDTO.getFieldName());
-            metric.setDataType(metricDTO.getDataType());
-            metric.setRecommendedValue(metricDTO.getRecommendedValue());
-            metric.setFluctuationRange(metricDTO.getFluctuationRange());
-            metric.setDescription(metricDTO.getDescription());
-            metric.setSortNo(metricDTO.getSortNo());
-            metrics.add(metric);
+            groupDTO.getVariables().forEach((fieldName, metricDTO) -> addMetric(metrics, metricDTO, fieldName));
         }
-        return metrics;
+        if (itemDTO == null)
+        {
+            return new ArrayList<>(metrics.values());
+        }
+        for (TaskDataMetricDTO metricDTO : defaultIfNull(itemDTO.getMetrics()))
+        {
+            addMetric(metrics, metricDTO, metricDTO.getFieldName());
+        }
+        if (itemDTO.getVariables() != null)
+        {
+            itemDTO.getVariables().forEach((fieldName, metricDTO) -> addMetric(metrics, metricDTO, fieldName));
+        }
+        return new ArrayList<>(metrics.values());
+    }
+
+    private void addMetric(Map<String, TaskDataMetric> metrics, TaskDataMetricDTO metricDTO, String fallbackFieldName)
+    {
+        if (metricDTO == null)
+        {
+            return;
+        }
+        String fieldName = StringUtils.isNotEmpty(metricDTO.getFieldName())
+                ? metricDTO.getFieldName()
+                : fallbackFieldName;
+        if (StringUtils.isEmpty(fieldName))
+        {
+            return;
+        }
+
+        TaskDataMetric metric = new TaskDataMetric();
+        metric.setFieldName(fieldName.trim());
+        metric.setDataType(metricDTO.getDataType());
+        metric.setRecommendedValue(metricDTO.getRecommendedValue());
+        metric.setFluctuationRange(metricDTO.getFluctuationRange());
+        metric.setDescription(metricDTO.getDescription());
+        metric.setSortNo(metricDTO.getSortNo());
+        metrics.put(metric.getFieldName(), metric);
+    }
+
+    private void fillMetrics(List<TaskDataGroup> groups)
+    {
+        if (groups == null || groups.isEmpty())
+        {
+            return;
+        }
+
+        List<Long> groupIds = groups.stream()
+                .map(TaskDataGroup::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (groupIds.isEmpty())
+        {
+            return;
+        }
+
+        Map<Long, List<TaskDataMetric>> metricMap = taskDataMetricMapper.selectByTaskDataGroupIds(groupIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        TaskDataMetric::getTaskDataGroupId,
+                        LinkedHashMap::new,
+                        Collectors.toList()));
+        for (TaskDataGroup group : groups)
+        {
+            group.setMetrics(metricMap.getOrDefault(group.getId(), Collections.emptyList()));
+        }
     }
 
     private String buildDataCategorySummary(TaskCreateRequest request)

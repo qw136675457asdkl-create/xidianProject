@@ -50,6 +50,7 @@ public class DBussinessDataInfoController extends BaseController
 {
     private static final int DEFAULT_PREVIEW_PAGE_SIZE = 20;
     private static final int MAX_PREVIEW_PAGE_SIZE = 1000;
+    private static final String FOLDER_UPLOAD_MODE_WHOLE = "whole";
 
     public final String profilePath = RuoYiConfig.getProfile() + "/data";
 
@@ -113,10 +114,10 @@ public class DBussinessDataInfoController extends BaseController
 
             throw new ServiceException("查询业务数据详情失败");
         }
-        if (ddataInfo != null && StringUtils.isNotEmpty(ddataInfo.getDataFilePath()))
+        if (ddataInfo != null)
         {
-            String relativePath = StringUtils.removeStart(ddataInfo.getDataFilePath(), "/");
-            String fileName = FileUtils.getName(relativePath);
+            String fullPath = ddataInfo.getFullPath();
+            String fileName = FileUtils.getName(fullPath);
             int dotIndex = fileName.lastIndexOf(".");
             ddataInfo.setFileName(dotIndex > -1 ? fileName.substring(0, dotIndex) : fileName);
         }
@@ -128,7 +129,9 @@ public class DBussinessDataInfoController extends BaseController
     @Log(title = "导入业务数据", businessType = BusinessType.INSERT)
     public AjaxResult insertDDataInfo(
             @ModelAttribute DdataInfo ddataInfo,
-            @RequestParam(value = "files" ) List<MultipartFile> files)
+            @RequestParam(value = "files" ) List<MultipartFile> files,
+            @RequestParam(value = "folderUploadMode", required = false) String folderUploadMode,
+            @RequestParam(value = "folderName", required = false) String folderName)
     {
         if (files == null || files.isEmpty()) {
             return error("请选择要上传的文件");
@@ -143,13 +146,18 @@ public class DBussinessDataInfoController extends BaseController
         }
 
         Long userId = SecurityUtils.getUserId();
+        boolean wholeFolderUpload = isWholeFolderUpload(folderUploadMode);
+        String folderUploadId = wholeFolderUpload ? UUID.randomUUID().toString().replace("-", "") : null;
         List<UploadedFileInfo> uploadedFileInfoList = new ArrayList<>();
         for (MultipartFile multipartFile : files){
             UploadedFileInfo uploadedFileInfo = new UploadedFileInfo();
             try {
-                String ObjectName = fileStorageService.upload(multipartFile, userId);
+                String originalFilename = multipartFile.getOriginalFilename();
+                String ObjectName = wholeFolderUpload
+                        ? fileStorageService.uploadFolderFile(multipartFile, userId, folderName, originalFilename, folderUploadId)
+                        : fileStorageService.upload(multipartFile, userId);
                 uploadedFileInfo.setObjectName(ObjectName);
-                uploadedFileInfo.setOriginalFilename(multipartFile.getOriginalFilename());
+                uploadedFileInfo.setOriginalFilename(originalFilename);
                 uploadedFileInfo.setContentType(multipartFile.getContentType());
                 uploadedFileInfo.setSize(multipartFile.getSize());
                 uploadedFileInfoList.add(uploadedFileInfo);
@@ -159,8 +167,15 @@ public class DBussinessDataInfoController extends BaseController
         }
         if(uploadedFileInfoList.isEmpty()) return error("文件全部上传失败");
         //落库处理
-        Integer importedCount = ddataService.insertDdataInfosByObjectNames(ddataInfo, uploadedFileInfoList);
+        Integer importedCount = wholeFolderUpload
+                ? ddataService.insertFolderDdataInfoByObjectNames(ddataInfo, uploadedFileInfoList, folderName)
+                : ddataService.insertDdataInfosByObjectNames(ddataInfo, uploadedFileInfoList);
         return success(importedCount);
+    }
+
+    private boolean isWholeFolderUpload(String folderUploadMode)
+    {
+        return FOLDER_UPLOAD_MODE_WHOLE.equalsIgnoreCase(StringUtils.trim(folderUploadMode));
     }
 
     @PreAuthorize("@ss.hasPermi('dataInfo:info:update')")
@@ -250,9 +265,15 @@ public class DBussinessDataInfoController extends BaseController
             throw new ServiceException("预览文件不存在");
         }
 
+        String originalFileName = StringUtils.defaultIfBlank(mdFileStorage.getOriginalFileName(), dataInfo.getDataName());
+        String lowerFileName = originalFileName == null ? "" : originalFileName.toLowerCase(Locale.ROOT);
+        if (!isInlinePreviewExtension(lowerFileName)) {
+            throw new ServiceException("暂不支持在线预览该文件");
+        }
+
         fileStorageService.preview(
                 mdFileStorage.getObjectName(),
-                mdFileStorage.getOriginalFileName(),
+                originalFileName,
                 mdFileStorage.getContentType(),
                 response
         );
@@ -292,9 +313,21 @@ public class DBussinessDataInfoController extends BaseController
             throw new ServiceException("数据不存在");
         }
 
+        List<MdFileStorage> storageList = mdFileStorageMapper.selectListByBussinessId(String.valueOf(dataInfo.getId()));
+        storageList = storageList == null ? new ArrayList<>() : storageList.stream()
+                .filter(item -> item != null && StringUtils.isNotEmpty(item.getObjectName()))
+                .collect(Collectors.toList());
+        if (storageList.size() > 1)
+        {
+            fileStorageService.downloadAsZip(storageList, dataInfo.getDataName(), response);
+            return;
+        }
+
         if (dataInfo.getStorageFileId() != null)
         {
-            MdFileStorage mdFileStorage = mdFileStorageMapper.selectById(dataInfo.getStorageFileId());
+            MdFileStorage mdFileStorage = storageList.isEmpty()
+                    ? mdFileStorageMapper.selectById(dataInfo.getStorageFileId())
+                    : storageList.get(0);
             if (mdFileStorage != null && StringUtils.isNotEmpty(mdFileStorage.getObjectName()))
             {
                 fileStorageService.download(
@@ -321,19 +354,6 @@ public class DBussinessDataInfoController extends BaseController
 
         String originalFileName = StringUtils.defaultIfBlank(mdFileStorage.getOriginalFileName(), dataInfo.getDataName());
         String lowerFileName = originalFileName == null ? "" : originalFileName.toLowerCase(Locale.ROOT);
-        if (isBinaryPreviewExtension(lowerFileName))
-        {
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("previewType", "unsupported");
-            result.put("message", "暂不支持预览二进制文件，请下载后查看");
-            result.put("rows", new ArrayList<>());
-            result.put("total", 0);
-            result.put("pageNum", 1);
-            result.put("pageSize", 0);
-            result.put("fileName", originalFileName);
-            return result;
-        }
-
         if (isInlinePreviewExtension(lowerFileName))
         {
             Map<String, Object> result = new LinkedHashMap<>();
@@ -345,6 +365,19 @@ public class DBussinessDataInfoController extends BaseController
             result.put("total", 1);
             result.put("pageNum", 1);
             result.put("pageSize", 1);
+            result.put("fileName", originalFileName);
+            return result;
+        }
+
+        if (!isCsvPreviewExtension(lowerFileName))
+        {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("previewType", "unsupported");
+            result.put("message", "暂不支持在线预览该文件，请下载后查看");
+            result.put("rows", new ArrayList<>());
+            result.put("total", 0);
+            result.put("pageNum", 1);
+            result.put("pageSize", 0);
             result.put("fileName", originalFileName);
             return result;
         }
@@ -371,11 +404,9 @@ public class DBussinessDataInfoController extends BaseController
                 || lowerFileName.endsWith(".mp4");
     }
 
-    private boolean isBinaryPreviewExtension(String lowerFileName)
+    private boolean isCsvPreviewExtension(String lowerFileName)
     {
-        return lowerFileName.endsWith(".bin")
-                || lowerFileName.endsWith(".dat")
-                || lowerFileName.endsWith(".raw");
+        return lowerFileName.endsWith(".csv") || lowerFileName.endsWith(".xlsx") || lowerFileName.endsWith(".xls");
     }
 
     private String resolveInlinePreviewType(String lowerFileName)
@@ -505,7 +536,7 @@ public class DBussinessDataInfoController extends BaseController
         dExperimentInfo.setExperimentId(UUID.randomUUID().toString());
         dExperimentInfo.setExperimentName(icdRequest.getExperimentInfo().getExperiementName());
         dExperimentInfo.setStartTime(DateUtils.truncate(new Date(), Calendar.DAY_OF_MONTH));
-        dExperimentInfo.setPath(icdRequest.getExperimentInfo().getExperiementPath());
+        dExperimentInfo.setPath("/" + dExperimentInfo.getExperimentName());
         dExperimentInfo.setTargetId(dTargetInfo.getTargetId());
         DExperimentInfo oldExperimentInfo = dExperimentInfoMapper.selectExperimentByProjectNameAndExperimentName(dExperimentInfo.getExperimentName(),dProjectInfo.getProjectName());
         if(oldExperimentInfo == null){
@@ -519,7 +550,6 @@ public class DBussinessDataInfoController extends BaseController
             ddataInfo.setExperimentId(dExperimentInfo.getExperimentId());
             ddataInfo.setDataName(dataRelation.getDataName());
             ddataInfo.setDataType(dataRelation.getDataType());
-            ddataInfo.setDataFilePath(dataRelation.getDataFilePath());
             ddataInfo.setTargetId(dTargetInfo.getTargetId());
             ddataInfo.setTargetType(dTargetInfo.getTargetType());
             ddataInfo.setSampleFrequency(1000);
@@ -557,7 +587,7 @@ public class DBussinessDataInfoController extends BaseController
         ProjectInfoDTO projectInfo = new ProjectInfoDTO();
         projectInfo.setProjectName((String) queryInfo.get("PROJECTNAME"));
         projectInfo.setProjectDesc((String) queryInfo.get("PROJECTDESC"));
-        projectInfo.setProjectPath((String) queryInfo.get("PROJECTPATH"));
+        projectInfo.setProjectPath("/" + projectInfo.getProjectName());
         icdRequest.setProjectInfo(projectInfo);
 
         DExperimentInfo dExperimentInfo = dExperimentInfoMapper.selectExperimentByProjectNameAndExperimentName(dataQuery.getExperiementName(), dataQuery.getProjectName());
@@ -569,7 +599,7 @@ public class DBussinessDataInfoController extends BaseController
 
         ExperimentInfoDTO experimentInfo = new ExperimentInfoDTO();
         experimentInfo.setExperiementName((String) queryInfo.get("EXPERIMENTNAME"));
-        experimentInfo.setExperiementPath((String) queryInfo.get("EXPERIMENTPATH"));
+        experimentInfo.setExperiementPath("/" + experimentInfo.getExperiementName());
         icdRequest.setExperimentInfo(experimentInfo);
 
         List<DataRelation> dataRelationList = new ArrayList<>();

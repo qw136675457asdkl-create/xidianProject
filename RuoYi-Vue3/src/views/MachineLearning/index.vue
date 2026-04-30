@@ -427,7 +427,7 @@ import {
 const fullWidthStyle = { width: '100%' }
 const DEFAULT_PYTHON_PATH = '/usr/local/python313/bin/python3.13'
 const DEFAULT_PYTHON_VERSION = 'Python 3.13'
-const DEFAULT_MATLAB_PATH = '/usr/local/bin/matlab'
+const DEFAULT_MATLAB_PATH = '/usr/local/MATLAB/R2024A/bin/matlab'
 const DEFAULT_MATLAB_VERSION = 'R2024A'
 
 const DEFAULT_PYTHON_CODE = `print("Hello, World!")
@@ -820,12 +820,25 @@ function resetForm() {
     .catch(() => {})
 }
 
+function normalizeConfiguration(config) {
+  if (!config || typeof config !== 'object') {
+    return {}
+  }
+
+  return Object.entries(config).reduce((result, [key, value]) => {
+    if (value !== null && value !== undefined && value !== '') {
+      result[key] = value
+    }
+    return result
+  }, {})
+}
+
 function loadConfiguration() {
   loading.value = true
   getMachineLearningConfiguration()
     .then((res) => {
       const config = res && res.data ? res.data : res
-      Object.assign(formData, createDefaultFormData(), config || {})
+      Object.assign(formData, createDefaultFormData(), normalizeConfiguration(config))
     })
     .catch((error) => {
       console.error('加载机器学习环境配置失败:', error)

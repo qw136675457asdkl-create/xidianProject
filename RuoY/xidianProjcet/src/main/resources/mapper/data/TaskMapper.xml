@@ -56,7 +56,8 @@
                t.path,
                t.create_by,
                t.create_time,
-               t.update_time
+               t.update_time,
+               t.create_user_id
         from SYSTEM_COLLABORATION_TEST.TASK t
                  left join SYSTEM_COLLABORATION_TEST.D_PROJECT_INFO p on t.project_id = p.project_id
                  left join SYSTEM_COLLABORATION_TEST.D_EXPERIMENT_INFO e on t.experiment_id = e.experiment_id
@@ -81,7 +82,8 @@
             path,
             create_by,
             create_time,
-            update_time
+            update_time,
+            create_user_id
         ) values (
             #{taskCode},
             #{taskName},
@@ -100,7 +102,8 @@
             #{path},
             #{createBy},
             #{createTime},
-            #{updateTime}
+            #{updateTime},
+            #{createUserId}
         )
     </insert>
 

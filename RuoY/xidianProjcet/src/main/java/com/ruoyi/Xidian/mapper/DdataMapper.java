@@ -34,4 +34,6 @@ public interface DdataMapper {
     Integer updateStorageFileId(@Param("id") Integer id, @Param("storageFileId") Long storageFileId);
 
     int countByExperimentId(@Param("experimentId") String experimentId);
+
+    List<Integer> selectIdsByStorageFileIds(@Param("storageFileIds") List<Long> storageFileIds);
 }

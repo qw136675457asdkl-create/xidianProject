@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.Xidian.mapper.TaskDataMetricMapper">
+    <resultMap id="taskDataMetricResultMap" type="com.ruoyi.Xidian.domain.TaskDataMetric">
+        <id column="id" property="id" />
+        <result column="task_data_group_id" property="taskDataGroupId" />
+        <result column="field_name" property="fieldName" />
+        <result column="data_type" property="dataType" />
+        <result column="recommended_value" property="recommendedValue" />
+        <result column="fluctuation_range" property="fluctuationRange" />
+        <result column="description" property="description" />
+        <result column="sort_no" property="sortNo" />
+    </resultMap>
+
+    <insert id="batchInsert" parameterType="java.util.List">
+        insert into SYSTEM_COLLABORATION_TEST.TASK_DATA_METRIC
+        (
+            task_data_group_id,
+            field_name,
+            data_type,
+            recommended_value,
+            fluctuation_range,
+            description,
+            sort_no
+        )
+        values
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.taskDataGroupId},
+                #{item.fieldName},
+                #{item.dataType},
+                #{item.recommendedValue},
+                #{item.fluctuationRange},
+                #{item.description},
+                #{item.sortNo}
+            )
+        </foreach>
+    </insert>
+
+    <select id="selectByTaskDataGroupIds" resultMap="taskDataMetricResultMap">
+        select *
+        from SYSTEM_COLLABORATION_TEST.TASK_DATA_METRIC
+        where task_data_group_id in
+        <foreach collection="groupIds" item="groupId" open="(" close=")" separator=",">
+            #{groupId}
+        </foreach>
+        order by task_data_group_id asc,
+                 case when sort_no is null then 1 else 0 end asc,
+                 sort_no asc,
+                 id asc
+    </select>
+
+    <delete id="deleteByTaskDataGroupIds">
+        delete from SYSTEM_COLLABORATION_TEST.TASK_DATA_METRIC
+        where task_data_group_id in
+        <foreach collection="groupIds" item="groupId" open="(" close=")" separator=",">
+            #{groupId}
+        </foreach>
+    </delete>
+
+    <delete id="deleteByTaskId" parameterType="java.lang.Long">
+        delete from SYSTEM_COLLABORATION_TEST.TASK_DATA_METRIC
+        where task_data_group_id in (
+            select id
+            from SYSTEM_COLLABORATION_TEST.TASK_DATA_GROUP
+            where task_id = #{taskId}
+        )
+    </delete>
+</mapper>

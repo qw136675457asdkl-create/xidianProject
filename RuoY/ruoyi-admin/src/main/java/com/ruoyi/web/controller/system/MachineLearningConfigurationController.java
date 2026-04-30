@@ -35,7 +35,7 @@ public class MachineLearningConfigurationController extends BaseController
         {
             return AjaxResult.error("Python 解释器路径不能为空");
         }
-        if (dto.getField104() == null)
+        if (StringUtils.isBlank(dto.getField104()))
         {
             return AjaxResult.error("Python 版本选择不能为空");
         }
@@ -47,7 +47,7 @@ public class MachineLearningConfigurationController extends BaseController
         {
             return AjaxResult.error("Matlab 安装路径不能为空");
         }
-        if (dto.getField125() == null)
+        if (StringUtils.isBlank(dto.getField125()))
         {
             return AjaxResult.error("Matlab 版本选择不能为空");
         }

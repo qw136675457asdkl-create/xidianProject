@@ -9,11 +9,14 @@ import com.ruoyi.Xidian.domain.DTO.TaskToPy;
 import com.ruoyi.Xidian.domain.MdFileStorage;
 import com.ruoyi.Xidian.domain.Task;
 import com.ruoyi.Xidian.domain.TaskDataGroup;
+import com.ruoyi.Xidian.domain.TaskDataMetric;
 import com.ruoyi.Xidian.domain.enums.FileStorageStatusEnum;
 import com.ruoyi.Xidian.domain.enums.MinioBusinessTypeEnum;
 import com.ruoyi.Xidian.domain.enums.TaskStatusEnum;
+import com.ruoyi.Xidian.mapper.DdataMapper;
 import com.ruoyi.Xidian.mapper.MdFileStorageMapper;
 import com.ruoyi.Xidian.mapper.TaskDataGroupMapper;
+import com.ruoyi.Xidian.mapper.TaskDataMetricMapper;
 import com.ruoyi.Xidian.mapper.TaskMapper;
 import com.ruoyi.common.core.domain.entity.SysUser;
 import com.ruoyi.common.core.redis.RedisCache;
@@ -41,6 +44,7 @@ import java.nio.file.StandardCopyOption;
 import java.rmi.ServerException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Collections;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,6 +56,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Component
@@ -63,6 +68,10 @@ public class TaskListener implements SmartLifecycle
     private TaskMapper taskMapper;
     @Autowired
     private TaskDataGroupMapper taskDataGroupMapper;
+    @Autowired
+    private TaskDataMetricMapper taskDataMetricMapper;
+    @Autowired
+    private DdataMapper ddataMapper;
     @Autowired
     private IDExperimentInfoService dExperimentInfoService;
     @Autowired
@@ -258,6 +267,7 @@ public class TaskListener implements SmartLifecycle
         }
 
         Task currentTask = taskMapper.selectById(task.getId());
+        task.setCreateUserId(currentTask.getCreateUserID());
         if (currentTask == null || TaskStatusEnum.SUCCESS.toString().equals(currentTask.getStatus()))
         {
             log.info("Task already completed or missing, ack directly, taskId={}, currentStatus={}, recordId={}",
@@ -275,10 +285,184 @@ public class TaskListener implements SmartLifecycle
         }
         catch (Exception exception)
         {
-            //TODO:删除仿真失败后的文件和数据库
-            
-            log.error("任务仿真失败,taskId={}"+ exception.getMessage(),task.getId());
+            List<String> generatedFileNames = new ArrayList<>();
+            try
+            {
+                String requestId = resolveRequestId(task);
+                JsonNode taskListResponse = pythonSimulationService.listSimulations();
+                String pythonTaskId = null;
+                for (JsonNode taskNode : taskListResponse.path("tasks"))
+                {
+                    if (requestId.equals(taskNode.path("request_id").asText(null)))
+                    {
+                        pythonTaskId = taskNode.path("task_id").asText(null);
+                        break;
+                    }
+                }
+
+                if (StringUtils.isNotEmpty(pythonTaskId))
+                {
+                    JsonNode taskResponse = pythonSimulationService.getSimulation(pythonTaskId);
+                    List<String> generatedFilePaths = new ArrayList<>();
+                    JsonNode filesNode = taskResponse.path("files");
+                    java.util.Iterator<Map.Entry<String, JsonNode>> fileIterator = filesNode.fields();
+                    while (fileIterator.hasNext())
+                    {
+                        Map.Entry<String, JsonNode> fileEntry = fileIterator.next();
+                        String filePath = fileEntry.getValue().asText(null);
+                        if (StringUtils.isEmpty(filePath))
+                        {
+                            continue;
+                        }
+                        if ("directory".equals(fileEntry.getKey()))
+                        {
+                            continue;
+                        }
+                        generatedFilePaths.add(filePath);
+                        String fileName = Paths.get(filePath).getFileName().toString();
+                        if (!generatedFileNames.contains(fileName))
+                        {
+                            generatedFileNames.add(fileName);
+                        }
+                    }
+
+                    String directory = getFilePath(taskResponse, "directory");
+                    if (StringUtils.isEmpty(directory))
+                    {
+                        directory = taskResponse.path("generated_files_directory").asText(null);
+                    }
+                    for (String filePath : generatedFilePaths)
+                    {
+                        try
+                        {
+                            Files.deleteIfExists(Paths.get(filePath));
+                        }
+                        catch (Exception cleanupException)
+                        {
+                            log.warn("Failed to delete failed simulation output file, taskId={}, filePath={}",
+                                    task.getId(), filePath, cleanupException);
+                        }
+                    }
+                    if (StringUtils.isNotEmpty(directory) && Files.exists(Paths.get(directory)))
+                    {
+                        try (Stream<Path> cleanupStream = Files.walk(Paths.get(directory)))
+                        {
+                            cleanupStream.sorted(Comparator.reverseOrder())
+                                    .forEach(cleanupPath -> {
+                                        try
+                                        {
+                                            Files.deleteIfExists(cleanupPath);
+                                        }
+                                        catch (Exception cleanupException)
+                                        {
+                                            log.warn("Failed to delete failed simulation output path, taskId={}, path={}",
+                                                    task.getId(), cleanupPath, cleanupException);
+                                        }
+                                    });
+                        }
+                    }
+                }
+            }
+            catch (Exception cleanupException)
+            {
+                log.warn("Failed to cleanup failed simulation output files, taskId={}", task.getId(), cleanupException);
+            }
+
+            try
+            {
+                if (!generatedFileNames.isEmpty())
+                {
+                    String cleanupCreateBy = task.getCreateBy();
+                    if (StringUtils.isEmpty(cleanupCreateBy) && currentTask != null)
+                    {
+                        cleanupCreateBy = currentTask.getCreateBy();
+                    }
+                    Date cleanupCreateTime = task.getCreateTime();
+                    if (cleanupCreateTime == null && currentTask != null)
+                    {
+                        cleanupCreateTime = currentTask.getCreateTime();
+                    }
+
+                    List<MdFileStorage> storageRows = mdFileStorageMapper.selectFailedSimulationStorage(
+                            MinioBusinessTypeEnum.DATA_RELATION.getCode(),
+                            minioProperties.getBucket(),
+                            generatedFileNames,
+                            task.getExperimentId(),
+                            task.getCreateUserID(),
+                            cleanupCreateBy,
+                            cleanupCreateTime);
+                    List<Long> storageIds = new ArrayList<>();
+                    List<String> objectNames = new ArrayList<>();
+                    for (MdFileStorage storageRow : storageRows)
+                    {
+                        if (storageRow == null)
+                        {
+                            continue;
+                        }
+                        Long storageId = storageRow.getId();
+                        if (storageId != null && !storageIds.contains(storageId))
+                        {
+                            storageIds.add(storageId);
+                        }
+                        String objectName = storageRow.getObjectName();
+                        if (StringUtils.isNotEmpty(objectName) && !objectNames.contains(objectName))
+                        {
+                            objectNames.add(objectName);
+                        }
+                    }
+
+                    for (String objectName : objectNames)
+                    {
+                        try
+                        {
+                            fileStorageService.delete(objectName);
+                        }
+                        catch (Exception cleanupException)
+                        {
+                            log.warn("Failed to delete failed simulation MinIO object, taskId={}, objectName={}",
+                                    task.getId(), objectName, cleanupException);
+                        }
+                    }
+
+                    if (!storageIds.isEmpty())
+                    {
+                        List<Integer> dataIds = ddataMapper.selectIdsByStorageFileIds(storageIds);
+                        for (Integer dataId : dataIds)
+                        {
+                            if (dataId != null)
+                            {
+                                redisCache.deleteObject(com.ruoyi.common.constant.CacheConstants.DATA_INFO_KEY + dataId);
+                            }
+                        }
+                        if (!dataIds.isEmpty())
+                        {
+                            ddataMapper.deleteDdataInfos(dataIds);
+                        }
+                        mdFileStorageMapper.deleteByIds(storageIds);
+                    }
+                }
+            }
+            catch (Exception cleanupException)
+            {
+                log.warn("Failed to cleanup failed simulation database records, taskId={}", task.getId(), cleanupException);
+            }
+
+            log.error("Simulation task failed, taskId={}", task.getId(), exception);
             onTaskProcessingFailure(task, retryCount, record, exception);
+            if (retryCount >= streamProperties.getMaxRetryCount())
+            {
+                try
+                {
+                    taskDataMetricMapper.deleteByTaskId(task.getId());
+                    taskDataGroupMapper.deleteByTaskId(task.getId());
+                    //taskMapper.deleteById(task.getId());
+                }
+                catch (Exception cleanupException)
+                {
+                    log.warn("Failed to delete final failed simulation task records, taskId={}",
+                            task.getId(), cleanupException);
+                }
+            }
         }
     }
 
@@ -292,6 +476,7 @@ public class TaskListener implements SmartLifecycle
         log.info("Task marked as RUNNING, taskId={}", task.getId());
 
         List<TaskDataGroup> persistedTaskDataGroups = taskDataGroupMapper.selectByTaskId(task.getId());
+        fillMetrics(persistedTaskDataGroups);
         task.setDataGroups(persistedTaskDataGroups);
         log.info("Loaded task data groups, taskId={}, groupCount={}",
                 task.getId(), task.getDataGroups() == null ? 0 : task.getDataGroups().size());
@@ -572,6 +757,7 @@ public class TaskListener implements SmartLifecycle
             datasetConfig.setFlightEndDatetime(requireDate(taskDataGroup.getEndTimeMs(), datasetKey + " end time"));
             datasetConfig.setSampleRateHz(requireValue(taskDataGroup.getFrequencyHz(), datasetKey + " sample rate"));
             applyTargetNum(datasetConfig, datasetKey, taskDataGroup.getTargetNum());
+            datasetConfig.setVariables(buildVariableConfigs(taskDataGroup.getMetrics()));
             return datasetConfig;
         }
 
@@ -589,7 +775,63 @@ public class TaskListener implements SmartLifecycle
             datasetConfig.setSampleRateHz(taskDataGroup.getFrequencyHz());
         }
         applyTargetNum(datasetConfig, datasetKey, taskDataGroup.getTargetNum());
+        datasetConfig.setVariables(buildVariableConfigs(taskDataGroup.getMetrics()));
         return datasetConfig;
+    }
+
+    private Map<String, TaskToPy.VariableConfig> buildVariableConfigs(List<TaskDataMetric> metrics)
+    {
+        Map<String, TaskToPy.VariableConfig> variables = new LinkedHashMap<>();
+        if (metrics == null || metrics.isEmpty())
+        {
+            return variables;
+        }
+
+        for (TaskDataMetric metric : metrics)
+        {
+            String fieldName = trimToNull(metric.getFieldName());
+            if (fieldName == null)
+            {
+                continue;
+            }
+
+            TaskToPy.VariableConfig variableConfig = new TaskToPy.VariableConfig();
+            variableConfig.setDataType(metric.getDataType());
+            variableConfig.setRecommendedValue(metric.getRecommendedValue());
+            variableConfig.setFluctuationRange(metric.getFluctuationRange());
+            variableConfig.setDescription(metric.getDescription());
+            variableConfig.setSortNo(metric.getSortNo());
+            variables.put(fieldName, variableConfig);
+        }
+        return variables;
+    }
+
+    private void fillMetrics(List<TaskDataGroup> groups)
+    {
+        if (groups == null || groups.isEmpty())
+        {
+            return;
+        }
+
+        List<Long> groupIds = groups.stream()
+                .map(TaskDataGroup::getId)
+                .filter(id -> id != null)
+                .collect(Collectors.toList());
+        if (groupIds.isEmpty())
+        {
+            return;
+        }
+
+        Map<Long, List<TaskDataMetric>> metricMap = taskDataMetricMapper.selectByTaskDataGroupIds(groupIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        TaskDataMetric::getTaskDataGroupId,
+                        LinkedHashMap::new,
+                        Collectors.toList()));
+        for (TaskDataGroup group : groups)
+        {
+            group.setMetrics(metricMap.getOrDefault(group.getId(), Collections.emptyList()));
+        }
     }
 
     private List<TaskDataGroup> requireTaskDataGroups(List<TaskDataGroup> taskDataGroups)
@@ -733,19 +975,29 @@ public class TaskListener implements SmartLifecycle
 
         switch (motionModel.trim())
         {
+            case "straight":
+            case "STRAIGHT":
             case "\u76f4\u7ebf\u6a21\u578b":
             case "LINEAR":
                 return "straight";
+            case "quadratic":
+            case "QUADRATIC":
             case "\u4e8c\u6b21\u66f2\u7ebf":
             case "QUADRATIC_CURVE":
                 return "quadratic";
+            case "cubic":
+            case "CUBIC":
             case "\u4e09\u6b21\u66f2\u7ebf":
             case "CUBIC_CURVE":
                 return "cubic";
+            case "two_segment":
+            case "TWO_SEGMENT":
             case "\u6298\u7ebf\u6a21\u578b":
             case "\u4e8c\u6298\u7ebf":
             case "POLYLINE_2":
                 return "two_segment";
+            case "three_segment":
+            case "THREE_SEGMENT":
             case "\u4e09\u6298\u7ebf":
             case "POLYLINE_3":
                 return "three_segment";

@@ -176,9 +176,9 @@
                 <el-select v-model="simulationForm.motionModel" placeholder="请选择">
                   <el-option
                     v-for="item in motionModelOptions"
-                    :key="item"
-                    :label="item"
-                    :value="item"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
                   />
                 </el-select>
               </div>
@@ -478,7 +478,7 @@
           <el-descriptions-item label="任务状态">{{ getTaskStatusText(detailDialogData.status) }}</el-descriptions-item>
           <el-descriptions-item label="所属项目">{{ detailDialogData.projectName || '--' }}</el-descriptions-item>
           <el-descriptions-item label="所属试验">{{ detailDialogData.experimentName || '--' }}</el-descriptions-item>
-          <el-descriptions-item label="运动模型">{{ detailDialogData.motionModel || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="运动模型">{{ formatMotionModel(detailDialogData.motionModel) }}</el-descriptions-item>
           <el-descriptions-item label="创建人">{{ detailDialogData.createBy || '--' }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ formatDateTime(detailDialogData.createTime) }}</el-descriptions-item>
           <el-descriptions-item label="输出目录" :span="2">
@@ -496,6 +496,19 @@
             <el-table-column label="输出类型" prop="outputType" width="120" align="center" />
             <el-table-column label="帧率(Hz)" prop="frequencyHz" width="120" align="center" />
             <el-table-column label="目标数量" prop="targetNum" width="120" align="center" />
+            <el-table-column label="字段说明" width="150" align="center">
+              <template #default="{ row }">
+                <el-button
+                  v-if="(row.metrics || []).length"
+                  link
+                  type="primary"
+                  @click="handleOpenMetricDialog(row)"
+                >
+                  查看字段列表（{{ row.metrics.length }}）
+                </el-button>
+                <span v-else>--</span>
+              </template>
+            </el-table-column>
             <el-table-column label="时间范围" min-width="240">
               <template #default="{ row }">
                 {{ formatRange(row.startTimeMs, row.endTimeMs) }}
@@ -526,6 +539,40 @@
           </el-table>
         </div>
       </div>
+    </el-dialog>
+
+    <el-dialog
+      v-model="metricDetailDialogOpen"
+      :title="metricDetailDialogTitle"
+      width="920px"
+      top="8vh"
+      append-to-body
+    >
+      <el-table
+        :data="metricDetailRows"
+        border
+        max-height="520"
+        empty-text="暂无字段说明"
+      >
+        <el-table-column type="index" label="序号" width="70" align="center" />
+        <el-table-column label="字段名称" prop="fieldName" min-width="150" show-overflow-tooltip />
+        <el-table-column label="数据类型" prop="dataType" width="120" align="center" />
+        <el-table-column label="推荐值" width="120" align="center">
+          <template #default="{ row }">
+            {{ formatMetricCell(row.recommendedValue) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="波动范围" width="130" align="center">
+          <template #default="{ row }">
+            {{ formatMetricCell(row.fluctuationRange) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="字段说明" min-width="280" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ formatMetricCell(row.description) }}
+          </template>
+        </el-table-column>
+      </el-table>
     </el-dialog>
   </div>
 </template>
@@ -578,7 +625,17 @@ const DEFAULT_END_COORDINATE = {
   lat: 24.0,
   alt: 1000
 }
-const motionModelOptions = ['直线模型', '盘旋模型', '折线模型', '机动模型']
+const motionModelOptions = [
+  { value: 'straight', label: '直线轨迹' },
+  { value: 'quadratic', label: '二次曲线轨迹（抛物线形转弯）' },
+  { value: 'cubic', label: '三次曲线轨迹（S形转弯）' },
+  { value: 'two_segment', label: '二折线轨迹（一个折点）' },
+  { value: 'three_segment', label: '三折线轨迹（两个折点）' }
+]
+const motionModelLabelMap = motionModelOptions.reduce((map, item) => {
+  map[item.value] = item.label
+  return map
+}, {})
 const simulationTabs = [
   { code: 'INS', label: '载机惯导信息', showDataSource: false, showTargetNum: false },
   { code: 'ATTITUDE', label: '载机姿态信息', showDataSource: false, showTargetNum: false },
@@ -746,6 +803,9 @@ const queryParams = reactive({
 })
 
 const detailDialogData = ref(createEmptyTaskDetail())
+const metricDetailDialogOpen = ref(false)
+const metricDetailDialogTitle = ref('')
+const metricDetailRows = ref([])
 const simulationForm = reactive(createSimulationForm())
 
 const currentSimulationTab = computed(() => {
@@ -970,7 +1030,7 @@ function createSimulationForm() {
     taskName: '',
     projectId: undefined,
     experimentId: undefined,
-    motionModel: motionModelOptions[0],
+    motionModel: motionModelOptions[0].value,
     startCoordinate: createStartCoordinate(),
     endCoordinate: createEndCoordinate(),
     tabs
@@ -1006,6 +1066,14 @@ function formatSimulationGroupName(groupName) {
   return SIMULATION_GROUP_NAME_DISPLAY_MAP[normalizedName] || normalizedName
 }
 
+function formatMotionModel(motionModel) {
+  const normalizedValue = String(motionModel || '').trim()
+  if (!normalizedValue) {
+    return '--'
+  }
+  return motionModelLabelMap[normalizedValue] || normalizedValue
+}
+
 function formatSimulationGroupSummary(summary) {
   const rawSummary = String(summary || '').trim()
   if (!rawSummary) {
@@ -1025,7 +1093,8 @@ function normalizeTaskDataGroups(groups) {
   return Array.isArray(groups)
     ? groups.map(group => ({
         ...group,
-        groupName: formatSimulationGroupName(group.groupName)
+        groupName: formatSimulationGroupName(group.groupName),
+        metrics: normalizeTaskMetrics(group.metrics)
       }))
     : []
 }
@@ -1084,26 +1153,33 @@ function formatRange(startTimeMs, endTimeMs) {
   return `${formatDateTime(startTimeMs)} 至 ${formatDateTime(endTimeMs)}`
 }
 
-function buildSimulationDataFilePath(dataName, outputType) {
-  const normalizedDataName = String(dataName || '').trim()
-  if (!normalizedDataName) {
-    return ''
-  }
-
-  const normalizedOutputType = String(outputType || '').trim().replace(/^\./, '')
-  const fileName = normalizedOutputType
-    ? `${normalizedDataName}.${normalizedOutputType}`
-    : normalizedDataName
-
-  return fileName.startsWith('/') ? fileName : `/${fileName}`
-}
-
 function normalizeProjectOptions(projects) {
   return Array.isArray(projects) ? projects : []
 }
 
 function normalizeExperimentOptions(experiments) {
   return Array.isArray(experiments) ? experiments : []
+}
+
+function normalizeTaskMetrics(metrics) {
+  return Array.isArray(metrics)
+    ? metrics
+        .map((metric, index) => ({
+          ...metric,
+          fieldName: String(metric?.fieldName || '').trim(),
+          dataType: String(metric?.dataType || '').trim(),
+          recommendedValue: metric?.recommendedValue ?? '',
+          fluctuationRange: metric?.fluctuationRange ?? '',
+          description: String(metric?.description || '').trim(),
+          sortNo: Number(metric?.sortNo) || index + 1
+        }))
+        .sort((prev, next) => prev.sortNo - next.sortNo)
+    : []
+}
+
+function formatMetricCell(value) {
+  const normalizedValue = String(value ?? '').trim()
+  return normalizedValue || '--'
 }
 
 function normalizeTaskRow(row) {
@@ -1379,6 +1455,24 @@ function buildMetricPayload(groupCode) {
   }))
 }
 
+function buildVariablePayload(groupCode) {
+  return buildMetricPayload(groupCode).reduce((variables, metric) => {
+    const fieldName = String(metric.fieldName || '').trim()
+    if (!fieldName) {
+      return variables
+    }
+
+    variables[fieldName] = {
+      data_type: metric.dataType,
+      recommended_value: metric.recommendedValue,
+      fluctuation_range: metric.fluctuationRange,
+      description: metric.description,
+      sort_no: metric.sortNo
+    }
+    return variables
+  }, {})
+}
+
 function resolveDataName(tabLabel, dataName) {
   const rawValue = String(dataName || '').trim()
   if (!rawValue) {
@@ -1422,7 +1516,7 @@ function buildTaskPayload() {
             endTimeMs: timeRange.endTimeMs,
             frequencyHz: item.state.frequencyHz,
             targetNum: item.state.targetNum,
-            metrics: buildMetricPayload(item.code)
+            variables: buildVariablePayload(item.code)
           }
         ]
       }
@@ -1613,13 +1707,19 @@ async function handleView(row) {
   detailDialogOpen.value = true
 }
 
+function handleOpenMetricDialog(row) {
+  metricDetailDialogTitle.value = `${row?.groupName || '子任务'}字段列表`
+  metricDetailRows.value = normalizeTaskMetrics(row?.metrics)
+  metricDetailDialogOpen.value = true
+}
+
 function handleOpenDataManager(row) {
   const projectName = String(detailDialogData.value?.projectName || '').trim()
   const experimentId = String(detailDialogData.value?.experimentId || '').trim()
   const experimentName = String(detailDialogData.value?.experimentName || '').trim()
-  const dataFilePath = String(row?.dataFilePath || buildSimulationDataFilePath(row?.dataName, row?.outputType)).trim()
+  const dataName = String(row?.dataName || '').trim()
 
-  if (!projectName || !experimentId || !experimentName || !dataFilePath) {
+  if (!projectName || !experimentId || !experimentName || !dataName) {
     ElMessage.warning('缺少跳转到数据管理所需的查询条件')
     return
   }
@@ -1631,7 +1731,7 @@ function handleOpenDataManager(row) {
     projectName,
     experimentId,
     experimentName,
-    dataFilePath
+    dataName
   }
 
   detailDialogOpen.value = false

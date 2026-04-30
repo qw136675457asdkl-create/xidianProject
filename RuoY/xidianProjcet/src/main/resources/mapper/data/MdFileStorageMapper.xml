@@ -102,6 +102,12 @@
         </foreach>
     </update>
 
+    <delete id="deleteByIds">
+        DELETE FROM SYSTEM_COLLABORATION_TEST.md_file_storage WHERE id IN
+        <foreach collection="ids" item="id" open="(" close=")" separator=",">
+            #{id}
+        </foreach>
+    </delete>
 
     <select id="selectById" resultMap="MdFileStorageResultMap">
         SELECT
@@ -155,6 +161,33 @@
         WHERE business_id = #{dataInfoId}
     </select>
 
+    <select id="selectListByBussinessId" resultMap="MdFileStorageResultMap">
+        SELECT
+            id,
+            business_type,
+            business_id,
+            storage_provider,
+            bucket_name,
+            object_name,
+            original_file_name,
+            file_ext,
+            content_type,
+            file_size,
+            etag,
+            upload_status,
+            upload_user_id,
+            upload_user_name,
+            completed_time,
+            remark,
+            create_by,
+            create_time,
+            update_by,
+            update_time
+        FROM SYSTEM_COLLABORATION_TEST.md_file_storage
+        WHERE business_id = #{dataInfoId}
+        ORDER BY id ASC
+    </select>
+
     <select id="selectByBucketAndObjectName" resultMap="MdFileStorageResultMap">
         SELECT
             id,
@@ -180,5 +213,47 @@
         FROM SYSTEM_COLLABORATION_TEST.md_file_storage
         WHERE bucket_name = #{bucketName}
           AND object_name = #{objectName}
+    </select>
+
+    <select id="selectFailedSimulationStorage" resultMap="MdFileStorageResultMap">
+        SELECT DISTINCT
+            s.id,
+            s.business_type,
+            s.business_id,
+            s.storage_provider,
+            s.bucket_name,
+            s.object_name,
+            s.original_file_name,
+            s.file_ext,
+            s.content_type,
+            s.file_size,
+            s.etag,
+            s.upload_status,
+            s.upload_user_id,
+            s.upload_user_name,
+            s.completed_time,
+            s.remark,
+            s.create_by,
+            s.create_time,
+            s.update_by,
+            s.update_time
+        FROM SYSTEM_COLLABORATION_TEST.md_file_storage s
+        LEFT JOIN SYSTEM_COLLABORATION_TEST.md_data_relation d ON d.storage_file_id = s.id
+        WHERE s.business_type = #{businessType}
+          AND s.bucket_name = #{bucketName}
+          AND s.original_file_name IN
+          <foreach collection="fileNames" item="fileName" open="(" close=")" separator=",">
+              #{fileName}
+          </foreach>
+          AND (d.experiment_id = #{experimentId} OR s.business_id IS NULL OR s.business_id = '')
+        <if test="uploadUserId != null">
+          AND s.upload_user_id = #{uploadUserId}
+        </if>
+        <if test="createBy != null and createBy != ''">
+          AND s.create_by = #{createBy}
+        </if>
+        <if test="createTime != null">
+          AND s.create_time &gt;= #{createTime}
+        </if>
     </select>
 </mapper>

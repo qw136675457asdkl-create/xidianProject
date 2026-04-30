@@ -95,6 +95,14 @@
             #{id}
         </foreach>
     </delete>
+    <select id="selectIdsByStorageFileIds" resultType="java.lang.Integer">
+        SELECT id
+        FROM SYSTEM_COLLABORATION_TEST.md_data_relation
+        WHERE storage_file_id IN
+        <foreach collection="storageFileIds" item="storageFileId" open="(" close=")" separator=",">
+            #{storageFileId}
+        </foreach>
+    </select>
     <select id="selectDdataInfoList" parameterType="DdataInfo" resultMap="DdataInfoResultMap">
         SELECT
         d.id,

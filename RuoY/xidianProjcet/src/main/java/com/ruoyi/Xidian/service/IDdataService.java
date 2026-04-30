@@ -15,9 +15,7 @@ public interface IDdataService {
     List<DdataInfo> selectDdataInfoList(DdataInfo ddataInfo);
 
     DdataInfo selectDdataInfoByDdataId(Integer id);
-    
-    Integer insertDdataInfoByPath(DdataInfo ddataInfo);
-    Integer transportDdataFile(DdataInfo ddataInfo);
+
     Integer updateDdataInfo(DdataInfo ddataInfo);
 
     Integer deleteDdataInfos(List<Integer> ids);
@@ -49,6 +47,8 @@ public interface IDdataService {
     String getpreviewUrl(DdataInfo ddataInfo);
 
     Integer insertDdataInfosByObjectNames(DdataInfo ddataInfo, List<UploadedFileInfo> uploadedFileInfoList);
+
+    Integer insertFolderDdataInfoByObjectNames(DdataInfo ddataInfo, List<UploadedFileInfo> uploadedFileInfoList, String folderName);
 
     int deleteDataInfoById(Integer id);
 }
