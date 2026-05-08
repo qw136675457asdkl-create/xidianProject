@@ -53,6 +53,16 @@ export function addExperimentInfo(data, config = {}) {
   return request(requestConfig)
 }
 
+export function completeExperimentFolderUpload(data, config = {}) {
+  return request({
+    url: '/data/info/experiment/folder/complete',
+    method: 'post',
+    data,
+    timeout: config.timeout ?? 60 * 60 * 1000,
+    ...config
+  })
+}
+
 export function addInfo(data, config = {}) {
   if (data?.type === 'experiment') {
     return addExperimentInfo(data, config)

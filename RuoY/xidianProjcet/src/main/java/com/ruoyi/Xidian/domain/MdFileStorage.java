@@ -24,4 +24,5 @@ public class MdFileStorage extends BaseEntity {
     private Long uploadUserId;
     private String uploadUserName;
     private Date completedTime;
+    private Boolean isFolder;
 }

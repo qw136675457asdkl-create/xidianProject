@@ -24,6 +24,13 @@ public interface MdFileStorageMapper {
 
     List<MdFileStorage> selectListByBussinessId(@Param("dataInfoId") String dataInfoId);
 
+    List<MdFileStorage> selectFolderStorageListByName(@Param("bucketName") String bucketName,
+                                                      @Param("originalFileName") String originalFileName,
+                                                      @Param("uploadUserId") Long uploadUserId);
+
+    List<MdFileStorage> selectListByBucketAndObjectNames(@Param("bucketName") String bucketName,
+                                                         @Param("objectNames") List<String> objectNames);
+
     List<MdFileStorage> selectFailedSimulationStorage(
             @Param("businessType") String businessType,
             @Param("bucketName") String bucketName,

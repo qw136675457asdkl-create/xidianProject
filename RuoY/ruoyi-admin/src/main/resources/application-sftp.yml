@@ -1,0 +1,7 @@
+security:
+  sftp:
+    host: 10.1.22.71
+    port: 22
+    username: hyy1208
+    # 密码登录时使用
+    password: ${SFTP_PASSWORD:xdhyy123}

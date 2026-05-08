@@ -1,6 +1,8 @@
 package com.ruoyi.Xidian.service.impl;
 
+import com.ruoyi.Xidian.domain.DExperimentInfo;
 import com.ruoyi.Xidian.domain.DProjectInfo;
+import com.ruoyi.Xidian.mapper.DExperimentInfoMapper;
 import com.ruoyi.Xidian.mapper.DProjectInfoMapper;
 import com.ruoyi.Xidian.service.IDProjectInfoService;
 import com.ruoyi.Xidian.support.PathLockManager;
@@ -33,6 +35,8 @@ public class DProjectInfoServiceImpl implements IDProjectInfoService
 
     @Autowired
     private RedisCache redisCache;
+    @Autowired
+    private DExperimentInfoMapper dExperimentInfoMapper;
 
     @Override
     public DProjectInfo selectDProjectInfoByProjectId(Long projectId)
@@ -124,7 +128,7 @@ public class DProjectInfoServiceImpl implements IDProjectInfoService
         {
             return 1;
         }
-
+        DExperimentInfo dExperimentInfo = new DExperimentInfo();
         List<Long> deleteProjectIds = new ArrayList<>();
         StringBuilder errorMsg = new StringBuilder();
 
@@ -134,6 +138,12 @@ public class DProjectInfoServiceImpl implements IDProjectInfoService
             if (projectInfo == null)
             {
                 errorMsg.append("项目不存在: ").append(projectId).append("\n");
+                continue;
+            }
+
+            dExperimentInfo.setProjectId(projectInfo.getProjectId());
+            if(dExperimentInfoMapper.selectDExperimentInfoList(dExperimentInfo).isEmpty()){
+                errorMsg.append("非法删除,项目下存在试验").append("\n");
                 continue;
             }
 
@@ -166,6 +176,11 @@ public class DProjectInfoServiceImpl implements IDProjectInfoService
         if (projectInfo == null)
         {
             throw new ServiceException("项目不存在");
+        }
+        DExperimentInfo dExperimentInfo = new DExperimentInfo();
+        dExperimentInfo.setProjectId(projectInfo.getProjectId());
+        if(!dExperimentInfoMapper.selectDExperimentInfoList(dExperimentInfo).isEmpty()){
+            throw new ServiceException("非法删除,项目下存在试验");
         }
         // 暂时不检查、不删除真实项目目录，仅删除数据库记录
         redisCache.deleteObject(CacheConstants.PROJECT_INFO_KEY + projectId);

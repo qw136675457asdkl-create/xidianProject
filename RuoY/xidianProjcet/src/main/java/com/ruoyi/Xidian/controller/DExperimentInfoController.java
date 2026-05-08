@@ -3,6 +3,7 @@ package com.ruoyi.Xidian.controller;
 import com.ruoyi.Xidian.domain.DExperimentInfo;
 import com.ruoyi.Xidian.domain.DProjectInfo;
 import com.ruoyi.Xidian.domain.DdataInfo;
+import com.ruoyi.Xidian.domain.DTO.FolderUploadFinalizeRequest;
 import com.ruoyi.Xidian.domain.TreeTable;
 import com.ruoyi.Xidian.domain.UploadedFileInfo;
 import com.ruoyi.Xidian.domain.VO.TreeTableVo;
@@ -36,6 +37,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.validation.Valid;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -169,6 +171,7 @@ public class DExperimentInfoController extends BaseController
                     return AjaxResult.error(insertResult);
                 }
                 ajax.put(AjaxResult.DATA_TAG, insertResult);
+                ajax.put("experimentId", dExperimentInfo.getExperimentId());
                 // Reuse the same MinIO upload and data-relation import flow as business data.
                 Integer importedCount = importExperimentDataFiles(files, relativePaths, dExperimentInfo, folderUploadMode, folderName);
                 ajax.put("importedCount", importedCount);
@@ -272,6 +275,48 @@ public class DExperimentInfoController extends BaseController
             return relativePath.trim();
         }
         return multipartFile.getOriginalFilename();
+    }
+
+    @PreAuthorize("@ss.hasPermi('data:info:addExperiment')")
+    @PostMapping("/experiment/folder/complete")
+    @Log(title = "Complete experiment folder import", businessType = BusinessType.INSERT)
+    public AjaxResult completeExperimentFolderUpload(@Valid @RequestBody FolderUploadFinalizeRequest request)
+    {
+        DExperimentInfo experimentInfo = dExperimentInfoService.selectDExperimentInfoByExperimentId(request.getExperimentId());
+        if (experimentInfo == null)
+        {
+            throw new ServiceException("试验信息不存在");
+        }
+
+        DdataInfo importDataInfo = buildExperimentImportDataInfo(experimentInfo);
+        importDataInfo.setDataName(request.getDataName());
+        if (request.getIsSimulation() != null)
+        {
+            importDataInfo.setIsSimulation(request.getIsSimulation());
+        }
+        if (request.getTargetId() != null)
+        {
+            importDataInfo.setTargetId(request.getTargetId());
+        }
+        if (request.getTargetType() != null)
+        {
+            importDataInfo.setTargetType(request.getTargetType());
+        }
+        if (request.getTargetCategory() != null)
+        {
+            importDataInfo.setTargetCategory(request.getTargetCategory());
+        }
+        if (request.getDataType() != null)
+        {
+            importDataInfo.setDataType(request.getDataType());
+        }
+
+        return success(ddataService.insertFolderDdataInfoByStorageFiles(
+                importDataInfo,
+                request.getFolderStorageId(),
+                request.getFiles(),
+                request.getFolderName()
+        ));
     }
 
     @PreAuthorize("@ss.hasPermi('data:info:edit')")

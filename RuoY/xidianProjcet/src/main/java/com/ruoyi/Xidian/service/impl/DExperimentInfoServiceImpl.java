@@ -231,6 +231,11 @@ public class DExperimentInfoServiceImpl implements IDExperimentInfoService
 
         for (DExperimentInfo experimentInfo : experimentInfos)
         {
+            int dataCount = ddataMapper.countByExperimentId(experimentInfo.getExperimentId());
+            if (dataCount > 0)
+            {
+                log.warn("非法操作，试验信息下存在数据: 试验id：{}",experimentInfo.getExperimentId());
+            }
             dExperimentInfoMapper.deleteDExperimentInfoByExperimentId(experimentInfo.getExperimentId());
             deleteExperimentIds.add(experimentInfo.getExperimentId());
             redisCache.deleteObject(CacheConstants.EXPERIMENT_INFO_KEY + experimentInfo.getExperimentId());

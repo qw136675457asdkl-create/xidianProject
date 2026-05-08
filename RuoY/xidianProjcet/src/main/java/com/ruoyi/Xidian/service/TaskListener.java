@@ -506,6 +506,9 @@ public class TaskListener implements SmartLifecycle
         mdFileStorage.setStorageProvider("MINIO");
         mdFileStorage.setUploadStatus(FileStorageStatusEnum.INIT.getCode());
         mdFileStorage.setUploadUserId(user.getUserId());
+        List<TaskDataGroup> taskDataGroups = new ArrayList<>();
+        task.getDataGroups().stream().filter(TaskDataGroup::getEnabled).forEach(taskDataGroups::add);
+        List<TaskDataGroup> taskDataGroupList = new ArrayList<>();
         for (String sourceName : fileLists)
         {
             String sourceFile = directory + "/" + sourceName;
@@ -520,18 +523,15 @@ public class TaskListener implements SmartLifecycle
             mdFileStorageMapper.insertMdFileStorage(mdFileStorage);
             mdFileStorageList.add(mdFileStorage);
             log.info("Copy simulation file, taskId={}, sourceFile={},objectName={}", task.getId(), sourceFile,objectName);
+            for(TaskDataGroup taskDataGroup:taskDataGroups){
+                if((taskDataGroup.getDataName() + "." + taskDataGroup.getOutputType()).equals(sourceName))
+                    taskDataGroupList.add(taskDataGroup);
+            }
             deleteFile(sourceFile);
         }
         deleteFile(directory);
         log.info("Simulation files copied and source directory removed, taskId={}, copiedCount={}",
                 task.getId(), mdFileStorageList.size());
-        List<TaskDataGroup> taskDataGroupList = new ArrayList<>();
-        for(TaskDataGroup taskDataGroup:task.getDataGroups()){
-            if(taskDataGroup.getEnabled() == true){
-                taskDataGroupList.add(taskDataGroup);
-            }
-        }
-
         iDdataService.syncSimulationResultFiles(
                 task.getExperimentId(),
                 mdFileStorageList,

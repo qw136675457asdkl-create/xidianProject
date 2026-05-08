@@ -9,7 +9,6 @@ import com.ruoyi.Xidian.mapper.MdFileStorageMapper;
 import com.ruoyi.Xidian.service.*;
 import com.ruoyi.common.annotation.Anonymous;
 import com.ruoyi.common.annotation.Log;
-import com.ruoyi.common.config.RuoYiConfig;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.page.TableDataInfo;
@@ -37,9 +36,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import javax.validation.Valid;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -51,8 +50,6 @@ public class DBussinessDataInfoController extends BaseController
     private static final int DEFAULT_PREVIEW_PAGE_SIZE = 20;
     private static final int MAX_PREVIEW_PAGE_SIZE = 1000;
     private static final String FOLDER_UPLOAD_MODE_WHOLE = "whole";
-
-    public final String profilePath = RuoYiConfig.getProfile() + "/data";
 
     @Autowired
     private IDExperimentInfoService dExperimentInfoService;
@@ -76,6 +73,9 @@ public class DBussinessDataInfoController extends BaseController
 
     @Autowired
     private FileStorageService fileStorageService;
+
+    @Autowired
+    private DownloadTokenService downloadTokenService;
 
     @GetMapping("/experimentInfoTree")
     public AjaxResult getDExperimentInfoTree()
@@ -173,9 +173,58 @@ public class DBussinessDataInfoController extends BaseController
         return success(importedCount);
     }
 
+    @PreAuthorize("@ss.hasPermi('dataInfo:info:insert')")
+    @PostMapping("/folder/complete")
+    @Log(title = "Complete business folder import", businessType = BusinessType.INSERT)
+    public AjaxResult completeFolderUpload(@Valid @RequestBody FolderUploadFinalizeRequest request)
+    {
+        return success(ddataService.insertFolderDdataInfoByStorageFiles(
+                buildFolderImportDataInfo(request),
+                request.getFolderStorageId(),
+                request.getFiles(),
+                request.getFolderName()
+        ));
+    }
+
+    @PreAuthorize("@ss.hasPermi('dataInfo:info:insert')")
+    @PostMapping("/direct/complete")
+    @Log(title = "Complete business direct import", businessType = BusinessType.INSERT)
+    public AjaxResult completeDirectUpload(@Valid @RequestBody BusinessDataImportRequest request)
+    {
+        return success(ddataService.insertDdataInfosByStorageFiles(
+                buildDirectImportDataInfo(request),
+                request.getFiles()
+        ));
+    }
+
     private boolean isWholeFolderUpload(String folderUploadMode)
     {
         return FOLDER_UPLOAD_MODE_WHOLE.equalsIgnoreCase(StringUtils.trim(folderUploadMode));
+    }
+
+    private DdataInfo buildFolderImportDataInfo(FolderUploadFinalizeRequest request)
+    {
+        DdataInfo ddataInfo = new DdataInfo();
+        ddataInfo.setDataName(request.getDataName());
+        ddataInfo.setExperimentId(request.getExperimentId());
+        ddataInfo.setTargetId(request.getTargetId());
+        ddataInfo.setTargetType(request.getTargetType());
+        ddataInfo.setTargetCategory(request.getTargetCategory());
+        ddataInfo.setDataType(request.getDataType());
+        ddataInfo.setIsSimulation(request.getIsSimulation());
+        return ddataInfo;
+    }
+
+    private DdataInfo buildDirectImportDataInfo(BusinessDataImportRequest request)
+    {
+        DdataInfo ddataInfo = new DdataInfo();
+        ddataInfo.setDataName(request.getDataName());
+        ddataInfo.setExperimentId(request.getExperimentId());
+        ddataInfo.setTargetId(request.getTargetId());
+        ddataInfo.setTargetType(request.getTargetType());
+        ddataInfo.setDataType(request.getDataType());
+        ddataInfo.setIsSimulation(request.getIsSimulation());
+        return ddataInfo;
     }
 
     @PreAuthorize("@ss.hasPermi('dataInfo:info:update')")
@@ -297,10 +346,8 @@ public class DBussinessDataInfoController extends BaseController
         return success(buildStoragePreviewResult(dataInfo, ddataInfo));
     }
 
-    @PreAuthorize("@ss.hasPermi('dataInfo:info:download')")
-    @PostMapping("/download")
     @Log(title = "下载业务数据文件", businessType = BusinessType.EXPORT)
-    public void downloadDDataInfoFile(@RequestBody DdataInfo ddataInfo, HttpServletResponse response)
+    private void writeDownloadResponse(DdataInfo ddataInfo, HttpServletResponse response, HttpServletRequest request)
     {
         if (ddataInfo == null || ddataInfo.getId() == null)
         {
@@ -313,6 +360,16 @@ public class DBussinessDataInfoController extends BaseController
             throw new ServiceException("数据不存在");
         }
 
+        MdFileStorage primaryStorage = dataInfo.getStorageFileId() == null
+                ? null
+                : mdFileStorageMapper.selectById(dataInfo.getStorageFileId());
+        if (primaryStorage != null && Boolean.TRUE.equals(primaryStorage.getIsFolder()))
+        {
+            //文件夹使用压缩包下载，不走断点续传
+            fileStorageService.downloadFolderAsZip(primaryStorage.getObjectName(), dataInfo.getDataName(), response);
+            return;
+        }
+        //该数据如果关联多个文件也使用压缩包下载
         List<MdFileStorage> storageList = mdFileStorageMapper.selectListByBussinessId(String.valueOf(dataInfo.getId()));
         storageList = storageList == null ? new ArrayList<>() : storageList.stream()
                 .filter(item -> item != null && StringUtils.isNotEmpty(item.getObjectName()))
@@ -323,27 +380,85 @@ public class DBussinessDataInfoController extends BaseController
             return;
         }
 
-        if (dataInfo.getStorageFileId() != null)
+        MdFileStorage mdFileStorage = primaryStorage;
+        if (mdFileStorage == null && !storageList.isEmpty())
         {
-            MdFileStorage mdFileStorage = storageList.isEmpty()
-                    ? mdFileStorageMapper.selectById(dataInfo.getStorageFileId())
-                    : storageList.get(0);
-            if (mdFileStorage != null && StringUtils.isNotEmpty(mdFileStorage.getObjectName()))
-            {
-                fileStorageService.download(
-                        mdFileStorage.getObjectName(),
-                        StringUtils.defaultIfBlank(mdFileStorage.getOriginalFileName(), dataInfo.getDataName()),
-                        response
-                );
-            }
+            mdFileStorage = storageList.get(0);
+        }
+        if (mdFileStorage != null && StringUtils.isNotEmpty(mdFileStorage.getObjectName()))
+        {
+//            fileStorageService.download(
+//                    mdFileStorage.getObjectName(),
+//                    StringUtils.defaultIfBlank(mdFileStorage.getOriginalFileName(), dataInfo.getDataName()),
+//                    response
+//            );
+            fileStorageService.minioRangeDownload(mdFileStorage.getObjectName(),
+                    StringUtils.defaultIfBlank(mdFileStorage.getOriginalFileName(),
+                            dataInfo.getDataName()), response, request);
         }
     }
+
+    @PreAuthorize("@ss.hasPermi('dataInfo:info:download')")
+    @PostMapping("/download/url")
+    public AjaxResult getDownloadUrl(@RequestBody DdataInfo ddataInfo)
+    {
+        validateDownloadableData(ddataInfo);
+        String token = downloadTokenService.createToken(ddataInfo);
+        return AjaxResult.success("获取下载地址成功","/data/bussiness/download/file?token=" + token);
+    }
+
+    @Anonymous
+    @GetMapping("/download/file")
+    public void downloadByToken(@RequestParam("token") String token, HttpServletRequest request, HttpServletResponse response)
+    {
+        //DdataInfo ddataInfo = downloadTokenService.parseToken(token);
+        DdataInfo ddataInfo = downloadTokenService.validateToken(token);
+        writeDownloadResponse(ddataInfo, response, request);
+    }
+
+    private void validateDownloadableData(DdataInfo ddataInfo)
+    {
+        if (ddataInfo == null || ddataInfo.getId() == null)
+        {
+            throw new ServiceException("下载参数不能为空");
+        }
+
+        DdataInfo dataInfo = ddataService.selectDdataInfoByDdataId(ddataInfo.getId());
+        if (dataInfo == null)
+        {
+            throw new ServiceException("数据不存在");
+        }
+
+        MdFileStorage primaryStorage = dataInfo.getStorageFileId() == null
+                ? null
+                : mdFileStorageMapper.selectById(dataInfo.getStorageFileId());
+        if (primaryStorage != null && Boolean.TRUE.equals(primaryStorage.getIsFolder())
+                && StringUtils.isNotEmpty(primaryStorage.getObjectName()))
+        {
+            return;
+        }
+
+        if (primaryStorage != null && StringUtils.isNotEmpty(primaryStorage.getObjectName()))
+        {
+            return;
+        }
+
+        List<MdFileStorage> storageList = mdFileStorageMapper.selectListByBussinessId(String.valueOf(dataInfo.getId()));
+        boolean hasDownloadableStorage = storageList != null && storageList.stream()
+                .filter(Objects::nonNull)
+                .anyMatch(item -> StringUtils.isNotEmpty(item.getObjectName()));
+        if (!hasDownloadableStorage)
+        {
+            throw new ServiceException("下载文件不存在");
+        }
+    }
+
 
     private Map<String, Object> buildStoragePreviewResult(DdataInfo dataInfo, DdataInfo requestData)
     {
         if (dataInfo.getStorageFileId() == null)
         {
-            throw new ServiceException("预览文件不存在");
+            throw new ServiceException("预览文件不存在?");
         }
 
         MdFileStorage mdFileStorage = mdFileStorageMapper.selectById(dataInfo.getStorageFileId());
@@ -564,13 +679,6 @@ public class DBussinessDataInfoController extends BaseController
     @Anonymous
     @PostMapping("/dbMgt/dataQuery")
     public ResponseEntity<Map<String, List<ICDRequest>>> getData(@RequestBody DataQuery dataQuery) {
-        //search from database
-        //SELECT * FROM D_PROJECT_INFO dpi, D_EXPERIMENT_INFO dei, D_TARGET_INFO dti , MD_DATA_RELATION mdr
-        //WHERE dpi.PROJECT_ID  = dei.PROJECT_ID
-        //AND dei.TARGET_ID = dti.TARGET_ID
-        //AND mdr.EXPERIMENT_ID = dei.EXPERIMENT_ID
-        //AND mdr.TARGET_ID  = dti.TARGET_ID
-
         log.info("Query Param: {}", dataQuery);
 
         List<ICDRequest> list = new ArrayList<>();
@@ -617,31 +725,5 @@ public class DBussinessDataInfoController extends BaseController
         map.put("data", list);
 
         return ResponseEntity.ok(map);
-    }
-
-
-
-    private Path buildProjectRoot(String projectPath)
-    {
-        return Paths.get(profilePath, StringUtils.removeStart(projectPath, "/")).normalize();
-    }
-
-    private Path buildExperimentRoot(String projectPath, String experimentPath)
-    {
-        return Paths.get(
-                profilePath,
-                StringUtils.removeStart(projectPath, "/"),
-                StringUtils.removeStart(experimentPath, "/")
-        ).normalize();
-    }
-
-    private Path resolveDataFilePath(Path experimentRoot, String relativePath)
-    {
-        Path absolutePath = experimentRoot.resolve(relativePath).normalize();
-        if (!absolutePath.startsWith(experimentRoot))
-        {
-            throw new ServiceException("文件路径无效");
-        }
-        return absolutePath;
     }
 }

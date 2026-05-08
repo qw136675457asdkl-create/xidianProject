@@ -1,7 +1,7 @@
 package com.ruoyi.Xidian.service;
 
 import com.ruoyi.Xidian.domain.*;
-import org.springframework.web.multipart.MultipartFile;
+import com.ruoyi.Xidian.domain.DTO.BusinessDataImportFile;
 
 import java.util.List;
 import java.util.Map;
@@ -22,19 +22,12 @@ public interface IDdataService {
 
     List<Map<String, Object>> getMovePathTree();
 
-    void uploadFiles(List<MultipartFile> files, String experimentId);
-
     void syncSimulationResultFiles(
             String experimentId,
             List<MdFileStorage> mdFileStorageList,
             List<String> sourceFileNames,
             String createBy,
             String targetCategory, List<TaskDataGroup> taskDataGroup);
-
-    default void uploadFiles(List<MultipartFile> files, List<String> relativePaths, String experimentId)
-    {
-        uploadFiles(files, experimentId);
-    }
 
     int renameDataName(List<DdataInfo> ddataInfo);
 
@@ -44,11 +37,13 @@ public interface IDdataService {
 
     String restoreDataFile(Integer BackDataId);
 
-    String getpreviewUrl(DdataInfo ddataInfo);
-
     Integer insertDdataInfosByObjectNames(DdataInfo ddataInfo, List<UploadedFileInfo> uploadedFileInfoList);
 
+    Integer insertDdataInfosByStorageFiles(DdataInfo ddataInfo, List<BusinessDataImportFile> files);
+
     Integer insertFolderDdataInfoByObjectNames(DdataInfo ddataInfo, List<UploadedFileInfo> uploadedFileInfoList, String folderName);
+
+    Integer insertFolderDdataInfoByStorageFiles(DdataInfo ddataInfo, Long folderStorageId, List<BusinessDataImportFile> files, String folderName);
 
     int deleteDataInfoById(Integer id);
 }

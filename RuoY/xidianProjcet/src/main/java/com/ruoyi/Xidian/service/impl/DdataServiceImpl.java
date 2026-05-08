@@ -2,6 +2,7 @@ package com.ruoyi.Xidian.service.impl;
 
 import com.ruoyi.Xidian.config.MinioProperties;
 import com.ruoyi.Xidian.domain.*;
+import com.ruoyi.Xidian.domain.DTO.BusinessDataImportFile;
 import com.ruoyi.Xidian.domain.enums.FileStorageProviderEnum;
 import com.ruoyi.Xidian.domain.enums.FileStorageStatusEnum;
 import com.ruoyi.Xidian.domain.enums.MinioBusinessTypeEnum;
@@ -43,9 +44,6 @@ import static org.apache.commons.lang3.StringUtils.trimToNull;
 public class DdataServiceImpl implements IDdataService
 {
     private static final Logger log = LoggerFactory.getLogger(DdataServiceImpl.class);
-    private static final Set<String> EXPERIMENT_ALLOWED_EXTENSIONS = new HashSet<>(
-            Arrays.asList("zip", "csv", "xls", "xlsx", "txt", "json", "doc", "docx", "pdf", "bin", "dat", "raw", "png" , "jpg" ,"jpeg","mp3","mp4")
-    );
 
     @Autowired
     private DdataMapper ddataMapper;
@@ -63,9 +61,6 @@ public class DdataServiceImpl implements IDdataService
     private RedisCache redisCache;
 
     @Autowired
-    private PathLockManager pathLockManager;
-
-    @Autowired
     private BackDataMapper backDataMapper;
 
     @Autowired
@@ -77,12 +72,8 @@ public class DdataServiceImpl implements IDdataService
     @Autowired
     private IDExperimentInfoService dExperimentInfoService;
 
-    @Autowired
-    private MinioDirectUploadService minioDirectUploadService;
-
     private final String profile = RuoYiConfig.getProfile() + "/data";
-    private final String backUPdir = RuoYiConfig.getBackupDir();
-    private final String backAndRestore = RuoYiConfig.getBackAndRestore();
+
     @Autowired
     private MinioProperties minioProperties;
     @Autowired
@@ -105,28 +96,6 @@ public class DdataServiceImpl implements IDdataService
             ddataInfo1.setFileSize(fileSize != null ? FileSizeUtil.formatFileSize(fileSize) : null);
         });
         return ddataInfos;
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public String getpreviewUrl(DdataInfo ddataInfo){
-        if (ddataInfo == null || ddataInfo.getId() == null) {
-            return null;
-        }
-
-        DdataInfo dataInfo = ddataMapper.selectDdataInfoById(ddataInfo.getId());
-        if (dataInfo == null || dataInfo.getStorageFileId() == null) {
-            log.warn("该数据没有上传文件");
-            return null;
-        }
-
-        MdFileStorage fileStorage = mdFileStorageMapper.selectById(dataInfo.getStorageFileId());
-        if (fileStorage == null || StringUtils.isEmpty(fileStorage.getObjectName())) {
-            log.warn("文件存储记录不存在或对象名为空，storageFileId={}", dataInfo.getStorageFileId());
-            return null;
-        }
-
-        return fileStorageService.createPresignedGetUrl(fileStorage.getObjectName());
     }
 
     //批量插入数据文件
@@ -180,6 +149,58 @@ public class DdataServiceImpl implements IDdataService
             }
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Integer insertDdataInfosByStorageFiles(DdataInfo ddataInfo, List<BusinessDataImportFile> files)
+    {
+        if (files == null || files.isEmpty())
+        {
+            return 0;
+        }
+
+        Map<String, MdFileStorage> storageMap = loadUploadedStorageMap(files);
+        String username = NickNameUtil.getNickName();
+        boolean allowCustomDataName = files.size() == 1;
+        int successCount = 0;
+
+        for (BusinessDataImportFile file : files)
+        {
+            if (file == null || StringUtils.isEmpty(file.getObjectName()))
+            {
+                continue;
+            }
+
+            MdFileStorage fileStorage = storageMap.get(file.getObjectName());
+            if (fileStorage == null)
+            {
+                throw new ServiceException("Uploaded file does not exist: " + file.getObjectName());
+            }
+
+            validateUploadedStorageBinding(fileStorage);
+            String relativePath = normalizeExperimentUploadPath(firstNonBlank(
+                    normalizeOptionalText(file.getRelativePath()),
+                    firstNonBlank(normalizeOptionalText(file.getOriginalFileName()), fileStorage.getOriginalFileName())
+            ));
+
+            DdataInfo insertDataInfo = buildBusinessImportDataInfo(ddataInfo, relativePath, relativePath, allowCustomDataName);
+            insertDataInfo.setCreateBy(username);
+            ddataMapper.insertDdataInfo(insertDataInfo);
+
+            String originalFileName = firstNonBlank(normalizeOptionalText(file.getOriginalFileName()), fileStorage.getOriginalFileName());
+            fileStorage.setOriginalFileName(originalFileName);
+            fileStorage.setFileExt(resolveStorageFileExt(originalFileName, fileStorage.getObjectName()));
+            fileStorage.setContentType(firstNonBlank(normalizeOptionalText(file.getContentType()), fileStorage.getContentType()));
+            fileStorage.setFileSize(file.getFileSize() == null ? fileStorage.getFileSize() : file.getFileSize());
+            fileStorage.setEtag(firstNonBlank(normalizeOptionalText(file.getEtag()), fileStorage.getEtag()));
+            fileStorage.setCompletedTime(new Date());
+            bindStorageFileToBusinessData(fileStorage, insertDataInfo);
+            ddataMapper.updateStorageFileId(insertDataInfo.getId(), fileStorage.getId());
+            successCount++;
+        }
+
+        return successCount;
     }
 
     @Override
@@ -263,21 +284,234 @@ public class DdataServiceImpl implements IDdataService
         }
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Integer insertFolderDdataInfoByStorageFiles(
+            DdataInfo ddataInfo,
+            Long folderStorageId,
+            List<BusinessDataImportFile> files,
+            String folderName)
+    {
+        if (folderStorageId == null)
+        {
+            throw new ServiceException("folderStorageId is required");
+        }
+        if (files == null || files.isEmpty())
+        {
+            return 0;
+        }
+
+        MdFileStorage folderStorage = mdFileStorageMapper.selectById(folderStorageId);
+        validateFolderStorageForFinalize(folderStorage, folderName);
+        validateFolderUploadFiles(folderStorage, files);
+        if (!fileStorageService.hasObjectsWithPrefix(buildFolderObjectPrefix(folderStorage.getObjectName())))
+        {
+            throw new ServiceException("Folder content does not exist");
+        }
+
+        String folderDataName = resolveFolderUploadDataNameFromStorageFiles(ddataInfo, folderName, files);
+        String username = NickNameUtil.getNickName();
+        DdataInfo insertDataInfo = buildBusinessImportDataInfo(ddataInfo, folderDataName, folderDataName, true);
+        insertDataInfo.setDataName(folderDataName);
+        Long storageFileId = folderStorage.getId();
+        insertDataInfo.setStorageFileId(storageFileId);
+        insertDataInfo.setCreateBy(username);
+        ddataMapper.insertDdataInfo(insertDataInfo);
+        updateFolderStorageBinding(folderStorage, insertDataInfo.getId(), resolveFolderTotalSize(files), username);
+        return 1;
+    }
+
     private String resolveFolderUploadDataName(
             DdataInfo template,
             String folderName,
             List<UploadedFileInfo> uploadedFileInfoLists)
     {
+        String requestFolderName = normalizeFolderUploadDataName(folderName);
+        if (StringUtils.isNotEmpty(requestFolderName))
+        {
+            return requestFolderName;
+        }
+
         String templateName = normalizeFolderUploadDataName(template == null ? null : template.getDataName());
         if (StringUtils.isNotEmpty(templateName))
         {
             return templateName;
         }
 
+        for (UploadedFileInfo uploadedFileInfo : uploadedFileInfoLists)
+        {
+            String originalFileName = uploadedFileInfo == null ? null : uploadedFileInfo.getOriginalFilename();
+            String resolvedFolderName = normalizeFolderUploadDataName(originalFileName);
+            if (StringUtils.isNotEmpty(resolvedFolderName))
+            {
+                return resolvedFolderName;
+            }
+        }
+
+        return "folder";
+    }
+
+    private String normalizeFolderUploadDataName(String value)
+    {
+        String candidate = trimToNull(value);
+        if (candidate == null)
+        {
+            return null;
+        }
+
+        String normalizedPath = normalizeExperimentUploadPath(candidate);
+        String relativePath = StringUtils.removeStart(normalizedPath, "/");
+        if (StringUtils.isEmpty(relativePath))
+        {
+            return null;
+        }
+        return relativePath.split("/")[0];
+    }
+
+    private String resolveFolderUploadDataNameFromStorageFiles(
+            DdataInfo template,
+            String folderName,
+            List<BusinessDataImportFile> files)
+    {
         String requestFolderName = normalizeFolderUploadDataName(folderName);
         if (StringUtils.isNotEmpty(requestFolderName))
         {
             return requestFolderName;
+        }
+
+        String templateName = normalizeFolderUploadDataName(template == null ? null : template.getDataName());
+        if (StringUtils.isNotEmpty(templateName))
+        {
+            return templateName;
+        }
+
+        for (BusinessDataImportFile file : files)
+        {
+            String candidate = file == null ? null : firstNonBlank(file.getRelativePath(), file.getOriginalFileName());
+            String resolvedFolderName = normalizeFolderUploadDataName(candidate);
+            if (StringUtils.isNotEmpty(resolvedFolderName))
+            {
+                return resolvedFolderName;
+            }
+        }
+
+        return "folder";
+    }
+
+    private void validateFolderStorageForFinalize(MdFileStorage folderStorage, String folderName)
+    {
+        if (folderStorage == null)
+        {
+            throw new ServiceException("Folder upload record does not exist");
+        }
+        if (!Boolean.TRUE.equals(folderStorage.getIsFolder()))
+        {
+            throw new ServiceException("The specified storage record is not a folder upload");
+        }
+
+        Long currentUserId = SecurityUtils.getUserId();
+        if (currentUserId != null
+                && folderStorage.getUploadUserId() != null
+                && !currentUserId.equals(folderStorage.getUploadUserId()))
+        {
+            throw new ServiceException("You do not have permission to bind this folder upload");
+        }
+
+        String businessId = trimToNull(folderStorage.getBusinessId());
+        if (businessId != null)
+        {
+            throw new ServiceException("Folder already exists, no need to upload again.");
+        }
+
+        String expectedFolderName = trimToNull(folderName);
+        String storageFolderName = trimToNull(folderStorage.getOriginalFileName());
+        if (expectedFolderName != null && storageFolderName != null && !expectedFolderName.equals(storageFolderName))
+        {
+            throw new ServiceException("Folder name does not match the initialized upload session");
+        }
+    }
+
+    private void validateFolderUploadFiles(MdFileStorage folderStorage, List<BusinessDataImportFile> files)
+    {
+        String folderPrefix = buildFolderObjectPrefix(folderStorage.getObjectName());
+        Set<String> objectNameSet = new HashSet<>();
+        for (BusinessDataImportFile file : files)
+        {
+            if (file == null)
+            {
+                continue;
+            }
+            String objectName = trimToNull(file.getObjectName());
+            if (objectName == null)
+            {
+                throw new ServiceException("objectName is required");
+            }
+            if (!objectName.startsWith(folderPrefix))
+            {
+                throw new ServiceException("Folder file object path does not match the initialized folder");
+            }
+            if (!objectNameSet.add(objectName))
+            {
+                throw new ServiceException("Duplicate folder file object path detected");
+            }
+        }
+    }
+
+    private String buildFolderObjectPrefix(String folderObjectName)
+    {
+        String normalizedFolderObjectName = trimToNull(folderObjectName);
+        if (normalizedFolderObjectName == null)
+        {
+            throw new ServiceException("Folder objectName is required");
+        }
+        return normalizedFolderObjectName.endsWith("/") ? normalizedFolderObjectName : normalizedFolderObjectName + "/";
+    }
+
+    private Long resolveFolderTotalSize(List<BusinessDataImportFile> files)
+    {
+        return files.stream()
+                .filter(Objects::nonNull)
+                .map(BusinessDataImportFile::getFileSize)
+                .filter(Objects::nonNull)
+                .reduce(0L, Long::sum);
+    }
+
+    private void updateFolderStorageBinding(MdFileStorage folderStorage,
+                                            Integer dataInfoId,
+                                            Long totalSize,
+                                            String username)
+    {
+        Date now = new Date();
+        folderStorage.setBusinessType(MinioBusinessTypeEnum.DATA_RELATION.getCode());
+        folderStorage.setBusinessId(String.valueOf(dataInfoId));
+        folderStorage.setContentType("application/x-directory");
+        folderStorage.setFileExt("");
+        folderStorage.setFileSize(totalSize);
+        folderStorage.setUploadStatus(FileStorageStatusEnum.BOUND.getCode());
+        folderStorage.setCompletedTime(now);
+        folderStorage.setIsFolder(Boolean.TRUE);
+        folderStorage.setUpdateBy(username);
+        folderStorage.setUpdateTime(now);
+        mdFileStorageMapper.updateMdFileStorage(folderStorage);
+    }
+
+/*
+
+    private String resolveFolderUploadDataName(
+            DdataInfo template,
+            String folderName,
+            List<UploadedFileInfo> uploadedFileInfoLists)
+    {
+        String requestFolderName = normalizeFolderUploadDataName(folderName);
+        if (StringUtils.isNotEmpty(requestFolderName))
+        {
+            return requestFolderName;
+        }
+
+        String templateName = normalizeFolderUploadDataName(template == null ? null : template.getDataName());
+        if (StringUtils.isNotEmpty(templateName))
+        {
+            return templateName;
         }
 
         for (UploadedFileInfo uploadedFileInfo : uploadedFileInfoLists)
@@ -310,6 +544,144 @@ public class DdataServiceImpl implements IDdataService
         return relativePath.split("/")[0];
     }
 
+    private String resolveFolderUploadDataNameFromStorageFiles(
+            DdataInfo template,
+            String folderName,
+            List<BusinessDataImportFile> files)
+    {
+        String requestFolderName = normalizeFolderUploadDataName(folderName);
+        if (StringUtils.isNotEmpty(requestFolderName))
+        {
+            return requestFolderName;
+        }
+
+        String templateName = normalizeFolderUploadDataName(template == null ? null : template.getDataName());
+        if (StringUtils.isNotEmpty(templateName))
+        {
+            return templateName;
+        }
+
+        for (BusinessDataImportFile file : files)
+        {
+            String candidate = file == null ? null : firstNonBlank(file.getRelativePath(), file.getOriginalFileName());
+            String resolvedFolderName = normalizeFolderUploadDataName(candidate);
+            if (StringUtils.isNotEmpty(resolvedFolderName))
+            {
+                return resolvedFolderName;
+            }
+        }
+
+        return "文件夹";
+    }
+
+    private DdataInfo createFolderImportDataInfo(DdataInfo template, String folderDataName)
+    {
+        String username = NickNameUtil.getNickName();
+        DdataInfo insertDataInfo = buildBusinessImportDataInfo(template, folderDataName, folderDataName, true);
+        insertDataInfo.setDataName(folderDataName);
+        insertDataInfo.setCreateBy(username);
+        ddataMapper.insertDdataInfo(insertDataInfo);
+        return insertDataInfo;
+    }
+
+    private Map<String, MdFileStorage> loadUploadedFolderStorageMap(List<BusinessDataImportFile> files)
+    {
+        List<String> objectNames = files.stream()
+                .filter(Objects::nonNull)
+                .map(BusinessDataImportFile::getObjectName)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (objectNames.isEmpty())
+        {
+            throw new ServiceException("未找到可绑定的上传文件");
+        }
+
+        List<MdFileStorage> storageFiles = mdFileStorageMapper.selectListByBucketAndObjectNames(
+                minioProperties.getBucket(),
+                objectNames
+        );
+        if (storageFiles == null || storageFiles.isEmpty())
+        {
+            throw new ServiceException("上传文件不存在或尚未完成");
+        }
+
+        return storageFiles.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(MdFileStorage::getObjectName, item -> item, (left, right) -> left));
+    }
+
+    private void validateFolderStorageBinding(MdFileStorage fileStorage)
+    {
+        Long currentUserId = SecurityUtils.getUserId();
+        if (currentUserId != null && fileStorage.getUploadUserId() != null && !currentUserId.equals(fileStorage.getUploadUserId()))
+        {
+            throw new ServiceException("当前用户无权绑定该上传文件: " + fileStorage.getObjectName());
+        }
+        String businessId = trimToNull(fileStorage.getBusinessId());
+        if (businessId != null)
+        {
+            throw new ServiceException("文件已绑定到其他数据记录，无法重复落库: " + fileStorage.getObjectName());
+        }
+    }
+
+*/
+
+    private String firstNonBlank(String preferred, String fallback)
+    {
+        String preferredValue = trimToNull(preferred);
+        return preferredValue != null ? preferredValue : trimToNull(fallback);
+    }
+
+    private Map<String, MdFileStorage> loadUploadedStorageMap(List<BusinessDataImportFile> files)
+    {
+        List<String> objectNames = files.stream()
+                .filter(Objects::nonNull)
+                .map(BusinessDataImportFile::getObjectName)
+                .filter(StringUtils::isNotEmpty)
+                .distinct()
+                .collect(Collectors.toList());
+        if (objectNames.isEmpty())
+        {
+            throw new ServiceException("No uploaded file to bind");
+        }
+
+        List<MdFileStorage> storageFiles = mdFileStorageMapper.selectListByBucketAndObjectNames(
+                minioProperties.getBucket(),
+                objectNames
+        );
+        if (storageFiles == null || storageFiles.isEmpty())
+        {
+            throw new ServiceException("Uploaded file does not exist");
+        }
+
+        return storageFiles.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(MdFileStorage::getObjectName, item -> item, (left, right) -> left));
+    }
+
+    private void validateUploadedStorageBinding(MdFileStorage fileStorage)
+    {
+        if (fileStorage == null)
+        {
+            throw new ServiceException("Upload record does not exist");
+        }
+
+        Long currentUserId = SecurityUtils.getUserId();
+        if (currentUserId != null
+                && fileStorage.getUploadUserId() != null
+                && !currentUserId.equals(fileStorage.getUploadUserId()))
+        {
+            throw new ServiceException("You do not have permission to bind this uploaded file");
+        }
+
+        String businessId = trimToNull(fileStorage.getBusinessId());
+        if (businessId != null)
+        {
+            throw new ServiceException("This uploaded file has already been bound");
+        }
+    }
+
     private MdFileStorage buildInitFileStorage(String bucket,
                                                String objectName,
                                                String originalFileName,
@@ -321,18 +693,19 @@ public class DdataServiceImpl implements IDdataService
                                                String username) {
         Date now = new Date();
         MdFileStorage fileStorage = new MdFileStorage();
-        fileStorage.setBusinessType(businessType);
+        fileStorage.setBusinessType(businessType == null ? "DATA_RELATION" : businessType);
         fileStorage.setBusinessId(businessId);
         fileStorage.setStorageProvider(FileStorageProviderEnum.MINIO.getCode());
         fileStorage.setBucketName(bucket);
         fileStorage.setObjectName(objectName);
         fileStorage.setOriginalFileName(originalFileName);
-        fileStorage.setFileExt(extractStorageFileExt(originalFileName != null ? originalFileName : objectName));
+        fileStorage.setFileExt(resolveStorageFileExt(originalFileName, objectName));
         fileStorage.setContentType(contentType);
         fileStorage.setFileSize(fileSize);
         fileStorage.setUploadStatus(FileStorageStatusEnum.INIT.getCode());
         fileStorage.setUploadUserId(userId);
         fileStorage.setUploadUserName(username);
+        fileStorage.setIsFolder(Boolean.FALSE);
         fileStorage.setCreateBy(username);
         fileStorage.setCreateTime(now);
         fileStorage.setUpdateBy(username);
@@ -354,6 +727,12 @@ public class DdataServiceImpl implements IDdataService
             return "";
         }
         return name.substring(dotIndex).toLowerCase(Locale.ROOT);
+    }
+
+    private String resolveStorageFileExt(String originalFileName, String objectName)
+    {
+        String originalExt = extractStorageFileExt(originalFileName);
+        return StringUtils.isNotEmpty(originalExt) ? originalExt : extractStorageFileExt(objectName);
     }
 
     //删除数据文件
@@ -392,122 +771,6 @@ public class DdataServiceImpl implements IDdataService
         return 1;
     }
 
-    private void uploadZipArchive(MultipartFile file, DExperimentInfo experimentInfo, String archivePath)
-    {
-        boolean hasUploadedEntry = false;
-        String archiveParentPath = extractDirectory(archivePath);
-
-        try (ZipInputStream zipInputStream = new ZipInputStream(file.getInputStream()))
-        {
-            ZipEntry entry;
-            while ((entry = zipInputStream.getNextEntry()) != null)
-            {
-                if (entry.isDirectory())
-                {
-                    zipInputStream.closeEntry();
-                    continue;
-                }
-
-                String entryPath = buildArchiveEntryPath(archiveParentPath, entry.getName());
-                if (shouldSkipExperimentPath(entryPath))
-                {
-                    zipInputStream.closeEntry();
-                    continue;
-                }
-
-                String extension = extractExtensionName(entryPath);
-                //检查文件扩展名是否为支持的类型
-                assertExperimentExtension(extension, entryPath);
-                storeExperimentFile(experimentInfo, entryPath, zipInputStream);
-                hasUploadedEntry = true;
-                zipInputStream.closeEntry();
-            }
-        }
-        catch (IOException e)
-        {
-            log.error("上传ZIP档案失败: {}", e.getMessage(), e);
-            throw new ServiceException("上传ZIP档案失败: " + e.getMessage());
-        }
-
-        if (!hasUploadedEntry)
-        {
-            log.warn("ZIP档案为空");
-            throw new ServiceException("ZIP档案为空");
-        }
-    }
-
-    private void storeExperimentFile(DExperimentInfo experimentInfo, String relativePath, InputStream inputStream)
-            throws IOException
-    {
-        DProjectInfo projectInfo = requireProject(experimentInfo.getProjectId());
-        //文件名包含无效字符
-        String normalizedPath = normalizeExperimentUploadPath(relativePath);
-        Path projectRoot = buildProjectRootPath(projectInfo);
-        Path experimentRoot = buildExperimentRootPath(projectInfo, experimentInfo);
-        String storagePath = buildExperimentStoragePath(normalizedPath);
-        Path targetPath = resolveAbsoluteDataPath(experimentRoot, storagePath);
-
-        try (PathLockManager.LockHandle ignored = pathLockManager.lock(
-                buildLockPaths(projectRoot, experimentRoot),
-                buildLockPaths(targetPath)))
-        {
-            Path parentPath = targetPath.getParent();
-            if (parentPath != null && Files.notExists(parentPath))
-            {
-                log.info("鍒涘缓鐩綍: {}", parentPath);
-                Files.createDirectories(parentPath);
-            }
-            //检查文件是否存在，避免重复上传
-            storagePath = resolveAvailableExperimentStoragePath(
-                    experimentInfo.getExperimentId(),
-                    experimentRoot,
-                    storagePath
-            );
-            targetPath = resolveAbsoluteDataPath(experimentRoot, storagePath);
-
-            Files.copy(inputStream, targetPath, StandardCopyOption.REPLACE_EXISTING);
-
-            DdataInfo ddataInfo = buildExperimentUploadDataInfo(experimentInfo, normalizedPath, storagePath);
-            DdataInfo oldInfo = ddataMapper.selectSameNameFile(experimentInfo.getExperimentId(), storagePath);
-            if (oldInfo != null)
-            {
-                log.info("文件已存在，合并数据: {}", oldInfo);
-                //合并数据
-                mergeExistingDataInfo(ddataInfo, oldInfo);
-                redisCache.deleteObject(CacheConstants.DATA_INFO_KEY + oldInfo.getId());
-                ddataMapper.updateDdataInfo(ddataInfo);
-                return;
-            }
-
-            ddataMapper.insertDdataInfo(ddataInfo);
-        }
-    }
-
-    private DdataInfo buildExperimentUploadDataInfo(
-            DExperimentInfo experimentInfo,
-            String relativePath,
-            String storagePath)
-    {
-        DdataInfo ddataInfo = new DdataInfo();
-        ddataInfo.setExperimentId(experimentInfo.getExperimentId());
-        ddataInfo.setTargetId(experimentInfo.getTargetId());
-        ddataInfo.setTargetType(resolveExperimentTargetType(experimentInfo));
-        ddataInfo.setDataName(extractFileName(relativePath));
-        ddataInfo.setDataType(resolveExperimentDataType(relativePath));
-        ddataInfo.setIsSimulation(Boolean.TRUE);
-        ddataInfo.setSampleFrequency(1000);
-        ddataInfo.setDeviceId(null);
-        ddataInfo.setDeviceInfo(null);
-        ddataInfo.setWorkStatus("completed");
-        ddataInfo.setCreateBy(NickNameUtil.getNickName());
-        return ddataInfo;
-    }
-
-    private String buildExperimentStoragePath(String relativePath)
-    {
-        return normalizeDataFilePath(relativePath);
-    }
-
     private String resolveExperimentTargetType(DExperimentInfo experimentInfo)
     {
         if (experimentInfo == null || StringUtils.isEmpty(experimentInfo.getTargetId()))
@@ -537,51 +800,11 @@ public class DdataServiceImpl implements IDdataService
         return normalizedPath.substring(normalizedPath.lastIndexOf('/') + 1);
     }
 
-    private void assertExperimentExtension(String extension, String relativePath)
-    {
-        if (StringUtils.isEmpty(extension) || !EXPERIMENT_ALLOWED_EXTENSIONS.contains(extension))
-        {
-            log.warn("文件扩展名不支持: {} {}", extension, relativePath);
-            throw new ServiceException("文件扩展名不支持: " + extension + " " + relativePath);
-        }
-    }
-
     //提取文件扩展名
     private String extractExtensionName(String path)
     {
         String suffix = extractSuffix(path);
         return StringUtils.isEmpty(suffix) ? "" : suffix.substring(1).toLowerCase(Locale.ROOT);
-    }
-
-    private String buildArchiveEntryPath(String archiveParentPath, String entryName)
-    {
-        String normalizedEntryPath = normalizeExperimentUploadPath(entryName);
-        if ("/".equals(archiveParentPath))
-        {
-            return normalizedEntryPath;
-        }
-        return normalizeExperimentUploadPath(
-                archiveParentPath + "/" + StringUtils.removeStart(normalizedEntryPath, "/"));
-    }
-
-    private boolean shouldSkipExperimentPath(String relativePath)
-    {
-        String normalizedPath = StringUtils.removeStart(normalizeDataFilePath(relativePath), "/");
-        String[] segments = normalizedPath.split("/");
-        for (String segment : segments)
-        {
-            String current = segment == null ? "" : segment.trim();
-            if (current.isEmpty())
-            {
-                continue;
-            }
-            if ("__MACOSX".equalsIgnoreCase(current) || ".DS_Store".equalsIgnoreCase(current)
-                    || "Thumbs.db".equalsIgnoreCase(current) || current.startsWith("._"))
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     private String normalizeExperimentUploadPath(String rawPath)
@@ -684,159 +907,6 @@ public class DdataServiceImpl implements IDdataService
         return 1;
     }
 
-    private DdataInfo buildBusinessPathImportDataInfo(
-            DdataInfo source,
-            DExperimentInfo experimentInfo,
-            String dataFilePath)
-    {
-        DdataInfo ddataInfo = new DdataInfo();
-        ddataInfo.setExperimentId(experimentInfo.getExperimentId());
-        ddataInfo.setTargetId(StringUtils.isNotEmpty(source.getTargetId())
-                ? normalizeOptionalText(source.getTargetId())
-                : experimentInfo.getTargetId());
-        ddataInfo.setTargetType(StringUtils.isNotEmpty(source.getTargetType())
-                ? normalizeOptionalText(source.getTargetType())
-                : resolveExperimentTargetType(experimentInfo));
-        ddataInfo.setTargetCategory(normalizeOptionalText(source.getTargetCategory()));
-        ddataInfo.setDataName(normalizeOptionalText(source.getDataName()));
-        ddataInfo.setDataType(normalizeOptionalText(source.getDataType()));
-        ddataInfo.setDeviceId(normalizeOptionalText(source.getDeviceId()));
-        ddataInfo.setDeviceInfo(normalizeOptionalText(source.getDeviceInfo()));
-        ddataInfo.setSampleFrequency(source.getSampleFrequency() == null || source.getSampleFrequency() <= 0
-                ? 1000
-                : source.getSampleFrequency());
-        ddataInfo.setWorkStatus(StringUtils.isNotEmpty(source.getWorkStatus())
-                ? normalizeOptionalText(source.getWorkStatus())
-                : "completed");
-        ddataInfo.setExtAttr(source.getExtAttr());
-        ddataInfo.setIsSimulation(source.getIsSimulation() == null ? Boolean.TRUE : source.getIsSimulation());
-        ddataInfo.setCreateBy(StringUtils.isNotEmpty(source.getCreateBy())
-                ? normalizeOptionalText(source.getCreateBy())
-                : NickNameUtil.getNickName());
-        ddataInfo.setCreateTime(source.getCreateTime());
-        return ddataInfo;
-    }
-
-    private DProjectInfo ensureTransportProject(String projectName)
-    {
-        DProjectInfo projectInfo = dProjectInfoMapper.selectSameNameProject(projectName);
-        if (projectInfo != null)
-        {
-            log.warn("项目已存在: {}", projectName);
-            return projectInfo;
-        }
-
-        Path projectRoot = Paths.get(
-                profile,
-                StringUtils.removeStart("/" + projectName, "/")
-        ).normalize();
-        DProjectInfo newProjectInfo = new DProjectInfo();
-        newProjectInfo.setProjectName(projectName);
-        newProjectInfo.setCreateBy(NickNameUtil.getNickName());
-        newProjectInfo.setPath("/" + projectName);
-        if (Files.exists(projectRoot))
-        {
-            log.warn("创建项目目录: {}", projectRoot);
-            dProjectInfoMapper.insertDProjectInfo(newProjectInfo);
-        }
-        else
-        {
-            projectInfoService.insertDProjectInfo(newProjectInfo);
-        }
-
-        DProjectInfo createdProjectInfo = dProjectInfoMapper.selectSameNameProject(projectName);
-        if (createdProjectInfo == null)
-        {
-            log.warn("项目创建失败: {}", projectName);
-            throw new ServiceException("项目创建失败");
-        }
-        return createdProjectInfo;
-    }
-
-    private DExperimentInfo ensureTransportExperiment(
-            DProjectInfo projectInfo,
-            String experimentName,
-            DdataInfo source)
-    {
-        DExperimentInfo experimentInfo =
-                dExperimentInfoMapper.selectSamePathExperiment(experimentName, projectInfo.getProjectId());
-        if (experimentInfo != null)
-        {
-            return experimentInfo;
-        }
-
-        Path experimentRoot = Paths.get(
-                profile,
-                StringUtils.removeStart(projectInfo.getPath(), "/"),
-                StringUtils.removeStart("/" + experimentName, "/")
-        ).normalize();
-        DExperimentInfo newExperimentInfo = new DExperimentInfo();
-        newExperimentInfo.setExperimentId(UUID.randomUUID().toString());
-        newExperimentInfo.setTargetId(source.getTargetId());
-        newExperimentInfo.setExperimentName(experimentName);
-        newExperimentInfo.setProjectId(projectInfo.getProjectId());
-        newExperimentInfo.setStartTime(new Date());
-        newExperimentInfo.setCreateBy(StringUtils.isNotEmpty(source.getCreateBy())
-                ? source.getCreateBy().trim()
-                : NickNameUtil.getNickName());
-        newExperimentInfo.setPath("/" + experimentName);
-        if (Files.exists(experimentRoot))
-        {
-            log.warn("创建实验目录: {}", experimentRoot);
-            dExperimentInfoMapper.insertDExperimentInfo(newExperimentInfo);
-        }
-        else
-        {
-            dExperimentInfoService.insertDExperimentInfo(newExperimentInfo);
-        }
-
-        DExperimentInfo createdExperimentInfo =
-                dExperimentInfoMapper.selectSamePathExperiment(experimentName, projectInfo.getProjectId());
-        if (createdExperimentInfo == null)
-        {
-            log.warn("实验创建失败: {}", experimentName);
-            throw new ServiceException("实验创建失败");
-        }
-        return createdExperimentInfo;
-    }
-
-    private DdataInfo buildTransportDataInfo(
-            DdataInfo source,
-            DExperimentInfo experimentInfo,
-            String dataFilePath,
-            String sourceFileName)
-    {
-        DdataInfo ddataInfo = new DdataInfo();
-        ddataInfo.setExperimentId(experimentInfo.getExperimentId());
-        ddataInfo.setTargetId(StringUtils.isNotEmpty(source.getTargetId())
-                ? source.getTargetId().trim()
-                : experimentInfo.getTargetId());
-        ddataInfo.setTargetType(StringUtils.isNotEmpty(source.getTargetType())
-                ? source.getTargetType().trim()
-                : resolveExperimentTargetType(experimentInfo));
-        ddataInfo.setTargetCategory(source.getTargetCategory());
-        ddataInfo.setDataName(StringUtils.isNotEmpty(source.getDataName())
-                ? source.getDataName().trim()
-                : sourceFileName);
-        ddataInfo.setDataType(StringUtils.isNotEmpty(source.getDataType())
-                ? source.getDataType().trim()
-                : resolveExperimentDataType(dataFilePath));
-        ddataInfo.setDeviceId(source.getDeviceId());
-        ddataInfo.setDeviceInfo(source.getDeviceInfo());
-        ddataInfo.setSampleFrequency(source.getSampleFrequency() == null || source.getSampleFrequency() <= 0
-                ? 1000
-                : source.getSampleFrequency());
-        ddataInfo.setWorkStatus(StringUtils.isNotEmpty(source.getWorkStatus())
-                ? source.getWorkStatus().trim()
-                : "completed");
-        ddataInfo.setExtAttr(source.getExtAttr());
-        ddataInfo.setIsSimulation(source.getIsSimulation() == null ? Boolean.TRUE : source.getIsSimulation());
-        ddataInfo.setCreateBy(StringUtils.isNotEmpty(source.getCreateBy())
-                ? source.getCreateBy().trim()
-                : NickNameUtil.getNickName());
-        return ddataInfo;
-    }
-
 
     private DdataInfo buildBusinessImportDataInfo(
             DdataInfo template,
@@ -909,52 +979,11 @@ public class DdataServiceImpl implements IDdataService
         fileStorage.setBusinessType(MinioBusinessTypeEnum.DATA_RELATION.getCode());
         fileStorage.setBusinessId(String.valueOf(ddataInfo.getId()));
         fileStorage.setUploadStatus(FileStorageStatusEnum.BOUND.getCode());
+        fileStorage.setIsFolder(Boolean.FALSE);
         fileStorage.setRemark("BOUND md_data_relation#" + ddataInfo.getId());
         fileStorage.setUpdateBy(resolveStorageUpdateUser(ddataInfo));
         fileStorage.setUpdateTime(new Date());
         mdFileStorageMapper.updateMdFileStorage(fileStorage);
-    }
-
-    @Override
-    public void uploadFiles(List<MultipartFile> files, String experimentId)
-    {
-        if (files == null || files.isEmpty())
-        {
-            return;
-        }
-
-        DExperimentInfo experimentInfo = requireExperiment(experimentId);
-        for (MultipartFile file : files)
-        {
-            if (file == null)
-            {
-                continue;
-            }
-
-            String uploadPath = normalizeExperimentUploadPath(file.getOriginalFilename());
-            if (shouldSkipExperimentPath(uploadPath))
-            {
-                continue;
-            }
-
-            String extension = extractExtensionName(uploadPath);
-            if ("zip".equals(extension))
-            {
-                uploadZipArchive(file, experimentInfo, uploadPath);
-                continue;
-            }
-
-            assertExperimentExtension(extension, uploadPath);
-            try (InputStream inputStream = file.getInputStream())
-            {
-                storeExperimentFile(experimentInfo, uploadPath, inputStream);
-            }
-            catch (IOException e)
-            {
-                log.warn("上传文件失败: {}", uploadPath, e);
-                throw new ServiceException("上传文件失败: " + e.getMessage());
-            }
-        }
     }
 
     /**
@@ -1373,55 +1402,6 @@ public class DdataServiceImpl implements IDdataService
         return projectInfo;
     }
 
-    private List<Path> buildLockPaths(Path... paths)
-    {
-        List<Path> result = new ArrayList<>();
-        if (paths == null)
-        {
-            return result;
-        }
-        for (Path path : paths)
-        {
-            if (path != null)
-            {
-                result.add(path);
-            }
-        }
-        return result;
-    }
-
-    private List<Integer> buildSingleIdList(Integer id)
-    {
-        List<Integer> ids = new ArrayList<>();
-        ids.add(id);
-        return ids;
-    }
-
-    private String buildImportedDataFilePath(String originalFilename)
-    {
-        String normalizedOriginalPath = normalizeDataFilePath("/" + originalFilename);
-        String baseName = extractBaseName(normalizedOriginalPath);
-        String suffix = extractSuffix(normalizedOriginalPath);
-        return buildDataFilePath("/", baseName ,suffix);
-    }
-
-    private String resolveAvailableExperimentStoragePath(String experimentId, Path experimentRoot, String storagePath)
-    {
-        String normalizedStoragePath = normalizeDataFilePath(storagePath);
-        String directory = extractDirectory(normalizedStoragePath);
-        String baseName = extractBaseName(normalizedStoragePath);
-        String suffix = extractSuffix(normalizedStoragePath);
-        String candidatePath = normalizedStoragePath;
-        int suffixIndex = 1;
-
-        while (hasExperimentStoragePathConflict(experimentId, experimentRoot, candidatePath))
-        {
-            candidatePath = buildDataFilePath(directory, baseName + "(" + suffixIndex + ")", suffix);
-            suffixIndex++;
-        }
-        return candidatePath;
-    }
-
     private boolean hasExperimentStoragePathConflict(String experimentId, Path experimentRoot, String storagePath)
     {
         String normalizedStoragePath = normalizeDataFilePath(storagePath);
@@ -1448,56 +1428,6 @@ public class DdataServiceImpl implements IDdataService
         ddataInfo.setIsSimulation(taskDataGroup.getIsSimulation());
         ddataInfo.setCreateBy(resolveSimulationCreateBy(createBy, experimentInfo));
         return ddataInfo;
-    }
-
-    private void mergeExistingDataInfo(DdataInfo ddataInfo, DdataInfo oldInfo)
-    {
-        ddataInfo.setId(oldInfo.getId());
-        if (ddataInfo.getTargetId() == null)
-        {
-            ddataInfo.setTargetId(oldInfo.getTargetId());
-        }
-        if (ddataInfo.getTargetType() == null)
-        {
-            ddataInfo.setTargetType(oldInfo.getTargetType());
-        }
-        if (ddataInfo.getTargetCategory() == null)
-        {
-            ddataInfo.setTargetCategory(oldInfo.getTargetCategory());
-        }
-        if (ddataInfo.getSampleFrequency() == null)
-        {
-            ddataInfo.setSampleFrequency(oldInfo.getSampleFrequency());
-        }
-        if (ddataInfo.getDeviceId() == null)
-        {
-            ddataInfo.setDeviceId(oldInfo.getDeviceId());
-        }
-        if (ddataInfo.getDeviceInfo() == null)
-        {
-            ddataInfo.setDeviceInfo(oldInfo.getDeviceInfo());
-        }
-        if (ddataInfo.getWorkStatus() == null)
-        {
-            ddataInfo.setWorkStatus(oldInfo.getWorkStatus());
-        }
-        if (ddataInfo.getExtAttr() == null)
-        {
-            ddataInfo.setExtAttr(oldInfo.getExtAttr());
-        }
-        if (ddataInfo.getIsSimulation() == null)
-        {
-            ddataInfo.setIsSimulation(oldInfo.getIsSimulation());
-        }
-    }
-
-    private Integer resolveSimulationSampleFrequency(Integer sampleFrequency)
-    {
-        if (sampleFrequency == null || sampleFrequency <= 0)
-        {
-            return 1000;
-        }
-        return sampleFrequency;
     }
 
     private String resolveSimulationCreateBy(String createBy, DExperimentInfo experimentInfo)
@@ -1530,21 +1460,6 @@ public class DdataServiceImpl implements IDdataService
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
-    }
-
-    private String normalizeFileName(String fileName, String fallbackDataPath)
-    {
-        String normalized = fileName == null ? "" : fileName.trim();
-        if (normalized.isEmpty())
-        {
-            normalized = extractBaseName(fallbackDataPath);
-        }
-        if (!normalized.matches("^[a-zA-Z0-9_\\-\\u4e00-\\u9fa5]+$"))
-        {
-            log.info("文件名包含无效字符: {}", normalized);
-            throw new ServiceException("文件名包含无效字符");
-        }
-        return normalized;
     }
 
     private String normalizeDataFilePath(String dataFilePath)
@@ -1584,38 +1499,6 @@ public class DdataServiceImpl implements IDdataService
         String fileName = normalized.substring(normalized.lastIndexOf('/') + 1);
         int dotIndex = fileName.lastIndexOf('.');
         return dotIndex >= 0 ? fileName.substring(0, dotIndex) : fileName;
-    }
-
-    private String extractDirectory(String dataFilePath)
-    {
-        String normalized = normalizeDataFilePath(dataFilePath);
-        int index = normalized.lastIndexOf('/');
-        if (index <= 0)
-        {
-            return "/";
-        }
-        return normalized.substring(0, index);
-    }
-
-    private String buildDataFilePath(String directory, String fileName, String suffix)
-    {
-        String normalizedDir = normalizeDataFilePath(StringUtils.isEmpty(directory) ? "/" : directory);
-        if (normalizedDir.length() > 1 && normalizedDir.endsWith("/"))
-        {
-            normalizedDir = normalizedDir.substring(0, normalizedDir.length() - 1);
-        }
-        String safeSuffix = suffix == null ? "" : suffix;
-        return "/".equals(normalizedDir)
-                ? "/" + fileName + safeSuffix
-                : normalizedDir + "/" + fileName + safeSuffix;
-    }
-
-    private Path buildProjectRootPath(DProjectInfo projectInfo)
-    {
-        return Paths.get(
-                profile,
-                StringUtils.removeStart(projectInfo.getPath(), "/")
-        ).normalize();
     }
 
     private Path buildExperimentRootPath(DProjectInfo projectInfo, DExperimentInfo experimentInfo)

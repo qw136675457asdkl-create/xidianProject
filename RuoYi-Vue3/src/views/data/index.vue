@@ -543,8 +543,32 @@
     </div>
 </template>
 <script setup name="Business">
-import {getdataList,getdataDetail,getMovePathTree,updatedata,deldata,adddata,previewData,previewFile,downloadData,RenameDataName,backupData,getBackupDataList,restoreBackupData} from '@/api/data/bussiness'
-import { getExperimentTree, addProjectInfo, addExperimentInfo, getInfo, updateInfo, delInfo } from "@/api/data/info"
+import axios from 'axios'
+import {
+  getdataList,
+  getdataDetail,
+  getMovePathTree,
+  updatedata,
+  deldata,
+  adddata,
+  previewData,
+  previewFile,
+  getDownloadUrl,
+  RenameDataName,
+  backupData,
+  getBackupDataList,
+  restoreBackupData,
+  initiateBusinessDataUpload,
+  initiateBusinessFolderUpload,
+  completeBusinessDataUpload,
+  completeBusinessFolderUpload,
+  initBusinessMultipartUpload,
+  getBusinessMultipartPartUploadUrl,
+  reportBusinessMultipartPart,
+  completeBusinessMultipartUpload,
+  completeBusinessDirectUpload
+} from '@/api/data/bussiness'
+import { getExperimentTree, addProjectInfo, addExperimentInfo, completeExperimentFolderUpload, getInfo, updateInfo, delInfo } from "@/api/data/info"
 import { addDateRange, blobValidate } from "@/utils/ruoyi"
 import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
 import {
@@ -557,7 +581,6 @@ import {
   Minus as MinusIcon,
   Close as CloseIcon
 } from '@element-plus/icons-vue'
-import { saveAs } from 'file-saver'
 import { useRoute, useRouter } from 'vue-router'
 import DataQueryPanel from './components/DataQueryPanel.vue'
 import DataTablePanel from './components/DataTablePanel.vue'
@@ -572,6 +595,7 @@ import BackupDataDialog from './components/BackupDataDialog.vue'
 const route = useRoute()
 const router = useRouter()
 const AUTO_QUERY_ROUTE_KEYS = ['autoQuery', 'source', 'projectId', 'projectName', 'experimentId', 'experimentName', 'dataName', 'dataFilePath']
+const apiBaseUrl = (import.meta.env.VITE_APP_BASE_API || '').replace(/\/$/, '')
 const dateRange = ref([])
 const { proxy } = getCurrentInstance()
 const treeTableOptions = ref(undefined)
@@ -631,8 +655,103 @@ const EXPERIMENT_UPLOAD_ACCEPT = ''
 const BUSINESS_UPLOAD_ACCEPT = ''
 const FOLDER_UPLOAD_MODE_WHOLE = 'whole'
 const FOLDER_UPLOAD_MODE_EXPANDED = 'expanded'
+const FOLDER_UPLOAD_SESSION_STORAGE_PREFIX = 'xidian-folder-upload-session:'
+const LARGE_FILE_UPLOAD_THRESHOLD = 100 * 1024 * 1024
 let experimentDraftUid = 0
 let businessDraftUid = 0
+
+function hashString(value = '') {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(index)
+    hash |= 0
+  }
+  return Math.abs(hash).toString(36)
+}
+
+function createFolderUploadId() {
+  const cryptoApi = typeof window !== 'undefined' ? window.crypto : null
+  if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
+    return cryptoApi.randomUUID().replace(/-/g, '')
+  }
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
+}
+
+function buildFolderUploadSessionKey(rawFiles = [], folderName = '', namespace = 'default') {
+  const signature = rawFiles
+    .map(file => {
+      const relativePath = normalizeExperimentUploadPath(file?.webkitRelativePath || file?.name || '')
+      const fileSize = Number(file?.size) || 0
+      const lastModified = Number(file?.lastModified) || 0
+      return `${relativePath}:${fileSize}:${lastModified}`
+    })
+    .filter(Boolean)
+    .sort()
+    .join('|')
+  return `${FOLDER_UPLOAD_SESSION_STORAGE_PREFIX}${hashString(`${namespace}::${folderName}::${signature}`)}`
+}
+
+function readFolderUploadSession(sessionKey) {
+  try {
+    const rawValue = window.localStorage.getItem(sessionKey)
+    if (!rawValue) return null
+    const parsed = JSON.parse(rawValue)
+    if (!parsed?.uploadId || !parsed?.uploadDate) {
+      return null
+    }
+    return parsed
+  } catch (error) {
+    return null
+  }
+}
+
+function writeFolderUploadSession(sessionKey, session) {
+  if (!sessionKey || !session?.uploadId || !session?.uploadDate) return
+  try {
+    window.localStorage.setItem(sessionKey, JSON.stringify(session))
+  } catch (error) {
+    // ignore localStorage failures and continue with current in-memory session
+  }
+}
+
+function mergeFolderUploadSession(sessionKey, patch = {}) {
+  if (!sessionKey || !patch || typeof patch !== 'object') return
+  const currentSession = readFolderUploadSession(sessionKey)
+  if (!currentSession) return
+  writeFolderUploadSession(sessionKey, { ...currentSession, ...patch })
+}
+
+function clearFolderUploadSessionByKey(sessionKey) {
+  if (!sessionKey) return
+  try {
+    window.localStorage.removeItem(sessionKey)
+  } catch (error) {
+    // ignore localStorage failures
+  }
+}
+
+function resolveFolderUploadSession(rawFiles = [], folderName = '', namespace = 'default') {
+  const sessionKey = buildFolderUploadSessionKey(rawFiles, folderName, namespace)
+  const storedSession = readFolderUploadSession(sessionKey)
+  if (storedSession) {
+    return {
+      folderSessionKey: sessionKey,
+      folderUploadId: storedSession.uploadId,
+      folderUploadDate: storedSession.uploadDate
+    }
+  }
+
+  const nextSession = {
+    uploadId: createFolderUploadId(),
+    uploadDate: new Date().toISOString().slice(0, 10)
+  }
+  writeFolderUploadSession(sessionKey, nextSession)
+  return {
+    folderSessionKey: sessionKey,
+    folderUploadId: nextSession.uploadId,
+    folderUploadDate: nextSession.uploadDate
+  }
+}
 
 // 详情预览相关状态
 const detailDialogRef = ref(null)
@@ -1246,7 +1365,10 @@ function createExperimentDraftFile(rawFile, relativePath, options = {}) {
     raw: rawFile,
     relativePath,
     folderUploadMode: options.folderUploadMode || '',
-    folderName: options.folderName || ''
+    folderName: options.folderName || '',
+    folderUploadId: options.folderUploadId || '',
+    folderUploadDate: options.folderUploadDate || '',
+    folderSessionKey: options.folderSessionKey || ''
   }
 }
 
@@ -1275,7 +1397,18 @@ function getWholeFolderDraftName(files = []) {
   return isWholeFolderDraftFiles(files) ? files[0].folderName : ''
 }
 
-async function chooseFolderUploadMode(rawFiles = []) {
+function getWholeFolderDraftMeta(files = []) {
+  if (!isWholeFolderDraftFiles(files)) return null
+  const [file] = files
+  return {
+    folderName: file?.folderName || '',
+    folderUploadId: file?.folderUploadId || '',
+    folderUploadDate: file?.folderUploadDate || '',
+    folderSessionKey: file?.folderSessionKey || ''
+  }
+}
+
+async function chooseFolderUploadMode(rawFiles = [], namespace = 'default') {
   const folderName = resolveFolderNameFromFiles(rawFiles) || '所选文件夹'
   try {
     await ElMessageBox.confirm(
@@ -1288,7 +1421,11 @@ async function chooseFolderUploadMode(rawFiles = []) {
         type: 'info'
       }
     )
-    return { folderUploadMode: FOLDER_UPLOAD_MODE_WHOLE, folderName }
+    return {
+      folderUploadMode: FOLDER_UPLOAD_MODE_WHOLE,
+      folderName,
+      ...resolveFolderUploadSession(rawFiles, folderName, namespace)
+    }
   } catch (action) {
     if (action === 'cancel') {
       return { folderUploadMode: FOLDER_UPLOAD_MODE_EXPANDED, folderName }
@@ -1355,7 +1492,7 @@ async function handleExperimentFolderChange(event) {
     return
   }
 
-  const folderOptions = await chooseFolderUploadMode(rawFiles)
+  const folderOptions = await chooseFolderUploadMode(rawFiles, 'experiment')
   resetFolderInput(event)
   if (!folderOptions) return
 
@@ -1409,6 +1546,298 @@ function setBusinessUploadProgressState({ percentage, status = '', text = '' }) 
   businessUploadProgress.text = text
 }
 
+function setUploadProgressState(progressState, { percentage, status = '', text = '' }) {
+  progressState.visible = true
+  progressState.percentage = Math.min(100, Math.max(0, Number(percentage) || 0))
+  progressState.status = status
+  progressState.text = text
+}
+
+function updateSequentialUploadProgress(progressState, options = {}) {
+  const totalBytes = Number(options.totalBytes) || 0
+  const uploadedBytes = Number(options.uploadedBytes) || 0
+  const uploadedFiles = Number(options.uploadedFiles) || 0
+  const totalFiles = Number(options.totalFiles) || 0
+  const fileName = options.fileName || ''
+  const percentage = totalBytes > 0
+    ? Math.min(99, Math.max(1, Math.round((uploadedBytes / totalBytes) * 100)))
+    : Math.min(99, Math.max(1, Math.round((uploadedFiles / Math.max(totalFiles, 1)) * 100)))
+
+  setUploadProgressState(progressState, {
+    percentage,
+    text: totalFiles > 0
+      ? `正在上传 ${uploadedFiles + 1}/${totalFiles}${fileName ? `：${fileName}` : ''}`
+      : '正在上传文件...'
+  })
+}
+
+function buildFolderUploadRequestFiles(files = [], uploadResults = []) {
+  const resultMap = new Map(uploadResults.map(item => [item.relativePath, item]))
+  return files.map(file => {
+    const relativePath = normalizeExperimentUploadPath(file?.relativePath || file?.name || file?.raw?.name)
+    const uploadResult = resultMap.get(relativePath) || {}
+    return {
+      bucket: uploadResult.bucket || '',
+      objectName: uploadResult.objectName || '',
+      originalFileName: uploadResult.originalFileName || file?.raw?.name || file?.name || '',
+      relativePath,
+      contentType: file?.raw?.type || uploadResult.contentType || '',
+      fileSize: Number(file?.raw?.size) || uploadResult.fileSize || 0,
+      etag: uploadResult.etag || ''
+    }
+  }).filter(item => item.bucket && item.objectName)
+}
+
+function unwrapRequestPayload(response) {
+  return response?.data?.data || response?.data || response || {}
+}
+
+function buildFolderExistsError(message) {
+  const error = new Error(message || '文件夹已存在，无需重复上传')
+  error.code = 'FOLDER_EXISTS'
+  return error
+}
+
+async function uploadFileToPresignedUrl(uploadUrl, rawFile, onUploadProgress, contentType = rawFile?.type) {
+  return axios.put(uploadUrl, rawFile, {
+    headers: {
+      'Content-Type': contentType || 'application/octet-stream'
+    },
+    onUploadProgress
+  })
+}
+
+function isLargeBusinessFile(rawFile) {
+  return Number(rawFile?.size) >= LARGE_FILE_UPLOAD_THRESHOLD
+}
+
+function resolveMultipartUploadEtag(response) {
+  const etag = response?.headers?.etag || response?.headers?.ETag
+  if (!etag) {
+    throw new Error('ETag was not returned for the uploaded part')
+  }
+  return etag
+}
+
+async function uploadLargeBusinessFileSequentially(file, businessData) {
+  const rawFile = file?.raw
+  if (!rawFile) {
+    throw new Error('No file selected')
+  }
+
+  const totalBytes = Number(rawFile.size) || 0
+  const initResponse = await initBusinessMultipartUpload({
+    fileName: rawFile.name,
+    contentType: rawFile.type,
+    fileSize: totalBytes,
+    businessType: 'DATA_RELATION'
+  }, {
+    silent: true,
+    timeout: 60 * 60 * 1000
+  })
+  const uploadInfo = unwrapRequestPayload(initResponse)
+  const uploadId = uploadInfo?.uploadId
+  const partSize = Number(uploadInfo?.partSize) || 0
+  const totalParts = Number(uploadInfo?.totalParts) || 0
+  if (!uploadId || !uploadInfo?.bucket || !uploadInfo?.objectName || partSize <= 0 || totalParts <= 0) {
+    throw new Error('Failed to initialize multipart upload')
+  }
+
+  let uploadedBytes = 0
+  for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
+    const start = (partNumber - 1) * partSize
+    const end = Math.min(start + partSize, rawFile.size)
+    const chunk = rawFile.slice(start, end)
+
+    const partUrlResponse = await getBusinessMultipartPartUploadUrl({
+      uploadId,
+      partNumber
+    }, {
+      silent: true,
+      timeout: 60 * 60 * 1000
+    })
+    const partUrlInfo = unwrapRequestPayload(partUrlResponse)
+    if (!partUrlInfo?.uploadUrl) {
+      throw new Error(`Failed to get upload URL for part ${partNumber}`)
+    }
+
+    const uploadResponse = await uploadFileToPresignedUrl(
+      partUrlInfo.uploadUrl,
+      chunk,
+      event => {
+        const currentLoaded = Number(event?.loaded) || 0
+        const currentUploadedBytes = uploadedBytes + currentLoaded
+        const percentage = totalBytes > 0
+          ? Math.min(99, Math.max(1, Math.round((currentUploadedBytes / totalBytes) * 100)))
+          : Math.min(99, Math.round((partNumber / totalParts) * 100))
+        setBusinessUploadProgressState({
+          percentage,
+          text: `Uploading ${rawFile.name} part ${partNumber}/${totalParts}`
+        })
+      },
+      rawFile.type
+    )
+
+    await reportBusinessMultipartPart({
+      uploadId,
+      partNumber,
+      etag: resolveMultipartUploadEtag(uploadResponse)
+    }, {
+      silent: true,
+      timeout: 60 * 60 * 1000
+    })
+
+    uploadedBytes = end
+    setBusinessUploadProgressState({
+      percentage: totalBytes > 0
+        ? Math.min(99, Math.max(1, Math.round((uploadedBytes / totalBytes) * 100)))
+        : Math.min(99, Math.round((partNumber / totalParts) * 100)),
+      text: `Uploaded ${partNumber}/${totalParts} parts`
+    })
+  }
+
+  const completeResponse = await completeBusinessMultipartUpload({
+    uploadId
+  }, {
+    silent: true,
+    timeout: 60 * 60 * 1000
+  })
+  const completeInfo = unwrapRequestPayload(completeResponse)
+
+  setBusinessUploadProgressState({
+    percentage: 99,
+    text: 'File uploaded, saving data record...'
+  })
+
+  const importResponse = await completeBusinessDirectUpload({
+    ...businessData,
+    files: [{
+      bucket: completeInfo?.bucket || uploadInfo.bucket,
+      objectName: completeInfo?.objectName || uploadInfo.objectName,
+      originalFileName: rawFile.name,
+      contentType: rawFile.type,
+      fileSize: totalBytes,
+      etag: completeInfo?.etag || ''
+    }]
+  }, {
+    silent: true,
+    timeout: 60 * 60 * 1000
+  })
+
+  return {
+    importedCount: Number(unwrapRequestPayload(importResponse)) || 1
+  }
+}
+
+async function uploadWholeFolderFilesSequentially(files = [], progressState, options = {}) {
+  const folderMeta = getWholeFolderDraftMeta(files)
+  if (!folderMeta?.folderName || !folderMeta?.folderUploadId || !folderMeta?.folderUploadDate) {
+    throw new Error('文件夹上传会话信息缺失，请重新选择文件夹')
+  }
+
+  const totalBytes = files.reduce((sum, file) => sum + (Number(file?.raw?.size) || 0), 0)
+  let completedBytes = 0
+  const uploadResults = []
+  const folderInitResponse = await initiateBusinessFolderUpload({
+    dataName: options?.dataName || folderMeta.folderName,
+    experimentId: options?.experimentId || '',
+    folderName: folderMeta.folderName,
+    folderUploadId: folderMeta.folderUploadId,
+    folderUploadDate: folderMeta.folderUploadDate,
+    totalSize: totalBytes
+  }, { silent: true, timeout: 60 * 60 * 1000 })
+  const folderInitInfo = unwrapRequestPayload(folderInitResponse)
+  if (folderInitInfo?.folderExists) {
+    clearWholeFolderUploadSession(files)
+    throw buildFolderExistsError(folderInitInfo?.message)
+  }
+  if (!folderInitInfo?.folderStorageId) {
+    throw new Error('未获取到文件夹上传会话，请重试')
+  }
+
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index]
+    const rawFile = file?.raw
+    const relativePath = normalizeExperimentUploadPath(file?.relativePath || file?.name || rawFile?.name)
+    if (!rawFile || !relativePath) continue
+
+    const initResponse = await initiateBusinessDataUpload({
+      fileName: rawFile.name,
+      relativePath,
+      folderName: folderMeta.folderName,
+      folderUploadId: folderMeta.folderUploadId,
+      folderUploadDate: folderMeta.folderUploadDate,
+      contentType: rawFile.type,
+      fileSize: Number(rawFile.size) || 0,
+      isFolder: true,
+      businessType: 'DATA_RELATION'
+    }, { silent: true, timeout: 60 * 60 * 1000 })
+    const uploadInfo = unwrapRequestPayload(initResponse)
+    if (!uploadInfo?.bucket || !uploadInfo?.objectName) {
+      throw new Error(`未获取到上传地址：${relativePath}`)
+    }
+
+    if (uploadInfo?.needUpload) {
+      await uploadFileToPresignedUrl(uploadInfo.uploadUrl, rawFile, event => {
+        updateSequentialUploadProgress(progressState, {
+          totalBytes,
+          uploadedBytes: completedBytes + (Number(event?.loaded) || 0),
+          uploadedFiles: index,
+          totalFiles: files.length,
+          fileName: relativePath
+        })
+      })
+      const completeResponse = await completeBusinessDataUpload({
+        objectName: uploadInfo.objectName,
+        originalFileName: rawFile.name
+      }, { silent: true, timeout: 60 * 60 * 1000 })
+      const completeInfo = unwrapRequestPayload(completeResponse)
+      uploadResults.push({
+        bucket: uploadInfo.bucket,
+        objectName: uploadInfo.objectName,
+        originalFileName: rawFile.name,
+        relativePath,
+        contentType: rawFile.type,
+        fileSize: Number(rawFile.size) || 0,
+        etag: completeInfo?.etag || ''
+      })
+    } else {
+      uploadResults.push({
+        bucket: uploadInfo.bucket,
+        objectName: uploadInfo.objectName,
+        originalFileName: rawFile.name,
+        relativePath,
+        contentType: rawFile.type,
+        fileSize: Number(rawFile.size) || 0,
+        etag: uploadInfo?.etag || ''
+      })
+    }
+
+    completedBytes += Number(rawFile.size) || 0
+    setUploadProgressState(progressState, {
+      percentage: totalBytes > 0 ? Math.min(99, Math.round((completedBytes / totalBytes) * 100)) : Math.round(((index + 1) / files.length) * 100),
+      text: `已完成 ${index + 1}/${files.length} 个文件`
+    })
+  }
+
+  const requestFiles = buildFolderUploadRequestFiles(files, uploadResults)
+  if (requestFiles.length !== files.length) {
+    throw new Error('部分文件上传状态缺失，请重新提交')
+  }
+
+  return {
+    folderMeta,
+    folderStorageId: folderInitInfo.folderStorageId,
+    files: requestFiles
+  }
+}
+
+function clearWholeFolderUploadSession(files = []) {
+  const folderMeta = getWholeFolderDraftMeta(files)
+  if (!folderMeta?.folderSessionKey) return
+  clearFolderUploadSessionByKey(folderMeta.folderSessionKey)
+}
+
 function createBusinessDraftFile(rawFile, relativePath, options = {}) {
   businessDraftUid += 1
   return {
@@ -1419,7 +1848,10 @@ function createBusinessDraftFile(rawFile, relativePath, options = {}) {
     raw: rawFile,
     relativePath,
     folderUploadMode: options.folderUploadMode || '',
-    folderName: options.folderName || ''
+    folderName: options.folderName || '',
+    folderUploadId: options.folderUploadId || '',
+    folderUploadDate: options.folderUploadDate || '',
+    folderSessionKey: options.folderSessionKey || ''
   }
 }
 
@@ -1476,7 +1908,7 @@ async function handleBusinessFolderChange(event) {
     return
   }
 
-  const folderOptions = await chooseFolderUploadMode(rawFiles)
+  const folderOptions = await chooseFolderUploadMode(rawFiles, 'business')
   resetFolderInput(event)
   if (!folderOptions) return
 
@@ -1773,6 +2205,66 @@ function submitProjectInfoForm() {
   })()
 }
 
+async function submitWholeFolderExperimentInfo(submitData) {
+  const folderMeta = getWholeFolderDraftMeta(experimentDraftFiles.value)
+  const sessionExperimentId = folderMeta?.folderSessionKey
+    ? readFolderUploadSession(folderMeta.folderSessionKey)?.experimentId
+    : ''
+
+  let experimentId = sessionExperimentId || ''
+  let createdExperimentId = ''
+  if (!experimentId) {
+    const createResponse = await addExperimentInfo(submitData, {
+      silent: true,
+      timeout: 60 * 60 * 1000
+    })
+    experimentId = createResponse?.experimentId
+    createdExperimentId = experimentId || ''
+    if (!experimentId) {
+      throw new Error('试验创建成功，但未返回 experimentId')
+    }
+    if (folderMeta?.folderSessionKey) {
+      mergeFolderUploadSession(folderMeta.folderSessionKey, { experimentId })
+    }
+  }
+
+  try {
+    const uploadResult = await uploadWholeFolderFilesSequentially(experimentDraftFiles.value, experimentUploadProgress, {
+      dataName: submitData.name || folderMeta?.folderName || '',
+      experimentId
+    })
+    setUploadProgressState(experimentUploadProgress, {
+      percentage: 99,
+      text: '文件上传完成，正在写入数据记录...'
+    })
+
+    await completeExperimentFolderUpload({
+      dataName: uploadResult.folderMeta?.folderName || submitData.name || '',
+      experimentId,
+      targetId: submitData.targetId,
+      targetType: submitData.targetType,
+      isSimulation: true,
+      folderName: uploadResult.folderMeta?.folderName || '',
+      folderStorageId: uploadResult.folderStorageId,
+      files: uploadResult.files
+    }, {
+      silent: true,
+      timeout: 60 * 60 * 1000
+    })
+
+    clearWholeFolderUploadSession(experimentDraftFiles.value)
+  } catch (error) {
+    if (createdExperimentId && error?.code === 'FOLDER_EXISTS') {
+      try {
+        await delInfo(createdExperimentId, 'experiment', { silent: true })
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup created experiment after duplicate folder upload', cleanupError)
+      }
+    }
+    throw error
+  }
+}
+
 function submitExperimentInfoForm() {
   if (experimentInfoSubmitLoading.value) return
 
@@ -1792,11 +2284,15 @@ function submitExperimentInfoForm() {
       submitData.parentId = submitData.parentId != null && submitData.parentId !== '' ? Number(submitData.parentId) : null
       const target = targetTypeOptions.value.find(item => item.targetId === submitData.targetId)
       submitData.targetType = target ? target.targetType : submitData.targetType
-      const formData = buildExperimentInfoFormData(submitData)
-      await addExperimentInfo(formData, {
-        silent: true,
-        onUploadProgress: event => updateExperimentUploadProgress(event, uploadCount)
-      })
+      if (isWholeFolderDraftFiles(experimentDraftFiles.value)) {
+        await submitWholeFolderExperimentInfo(submitData)
+      } else {
+        const formData = buildExperimentInfoFormData(submitData)
+        await addExperimentInfo(formData, {
+          silent: true,
+          onUploadProgress: event => updateExperimentUploadProgress(event, uploadCount)
+        })
+      }
       if (uploadCount > 0) {
         experimentUploadProgress.visible = true
         experimentUploadProgress.percentage = 100
@@ -1807,6 +2303,13 @@ function submitExperimentInfoForm() {
       experimentInfoDialogOpen.value = false
       await Promise.allSettled([getList(), getTreeData(), getProjects()])
     } catch (error) {
+      if (error?.code === 'FOLDER_EXISTS') {
+        experimentUploadProgress.visible = true
+        experimentUploadProgress.status = ''
+        experimentUploadProgress.text = error.message || '文件夹已存在，无需重复上传'
+        ElMessage.warning(error.message || '文件夹已存在，无需重复上传')
+        return
+      }
       if (uploadCount > 0) {
         experimentUploadProgress.visible = true
         experimentUploadProgress.status = 'exception'
@@ -2767,12 +3270,44 @@ const handleTargetChange = (targetId) => {
 const cancelUpload = () => {
   importVisible.value = false
 }
+
+async function submitWholeFolderBusinessUpload(selectedFiles, businessData) {
+  const uploadResult = await uploadWholeFolderFilesSequentially(selectedFiles, businessUploadProgress, {
+    dataName: businessData.dataName || '',
+    experimentId: businessData.experimentId || ''
+  })
+  setBusinessUploadProgressState({
+    percentage: 99,
+    text: '文件上传完成，正在写入数据记录...'
+  })
+  const response = await completeBusinessFolderUpload({
+    ...businessData,
+    dataName: businessData.dataName || uploadResult.folderMeta?.folderName || '',
+    folderName: uploadResult.folderMeta?.folderName || '',
+    folderStorageId: uploadResult.folderStorageId,
+    files: uploadResult.files
+  }, {
+    silent: true,
+    timeout: 60 * 60 * 1000
+  })
+  clearWholeFolderUploadSession(selectedFiles)
+  return response
+}
+
 const submitUpload = async () => {
   if (fileLoading.value) return
 
   const selectedFiles = businessDraftFiles.value.filter(file => file?.raw)
   if (selectedFiles.length === 0) {
     ElMessage.warning('请选择要上传的文件')
+    return
+  }
+
+  const wholeFolderName = getWholeFolderDraftName(selectedFiles)
+  const hasLargeSingleFile = !wholeFolderName && selectedFiles.length === 1 && isLargeBusinessFile(selectedFiles[0]?.raw)
+  const hasLargeFilesInBatch = !wholeFolderName && !hasLargeSingleFile && selectedFiles.some(file => isLargeBusinessFile(file?.raw))
+  if (hasLargeFilesInBatch) {
+    ElMessage.warning('Large file upload currently supports one file at a time')
     return
   }
 
@@ -2783,7 +3318,6 @@ const submitUpload = async () => {
     text: `准备上传 ${selectedFiles.length} 个文件...`
   })
   try {
-    const wholeFolderName = getWholeFolderDraftName(selectedFiles)
     const shouldSubmitDataName = businessSingleUploadNameEnabled.value
     const businessData = {
       dataName: shouldSubmitDataName ? (uploadDataForm.dataName || wholeFolderName) : '',
@@ -2793,13 +3327,16 @@ const submitUpload = async () => {
       dataType: uploadDataForm.dataType,
       isSimulation: uploadDataForm.isSimulation
     }
-    const formData = buildBusinessImportFormData(businessData, selectedFiles)
-    const response = await adddata(formData, {
-      silent: true,
-      timeout: 2 * 60 * 60 * 1000,
-      onUploadProgress: event => updateBusinessUploadProgress(event, selectedFiles.length)
-    })
-    const importedCount = Number(response?.data) || selectedFiles.length
+    const response = wholeFolderName
+      ? await submitWholeFolderBusinessUpload(selectedFiles, businessData)
+      : hasLargeSingleFile
+        ? await uploadLargeBusinessFileSequentially(selectedFiles[0], businessData)
+      : await adddata(buildBusinessImportFormData(businessData, selectedFiles), {
+          silent: true,
+          timeout: 2 * 60 * 60 * 1000,
+          onUploadProgress: event => updateBusinessUploadProgress(event, selectedFiles.length)
+        })
+    const importedCount = Number(response?.importedCount ?? unwrapRequestPayload(response)) || selectedFiles.length
     setBusinessUploadProgressState({
       percentage: 100,
       status: 'success',
@@ -2809,6 +3346,15 @@ const submitUpload = async () => {
     importVisible.value = false
     await getList()
   } catch (error) {
+    if (error?.code === 'FOLDER_EXISTS') {
+      setBusinessUploadProgressState({
+        percentage: businessUploadProgress.percentage,
+        status: '',
+        text: error.message || '文件夹已存在，无需重复上传'
+      })
+      ElMessage.warning(error.message || '文件夹已存在，无需重复上传')
+      return
+    }
     setBusinessUploadProgressState({
       percentage: businessUploadProgress.percentage,
       status: 'exception',
@@ -2818,6 +3364,48 @@ const submitUpload = async () => {
   } finally {
     fileLoading.value = false
   }
+}
+
+/** 提取后端返回的下载地址，兼容不同 request 封装 */
+const getUrlFromResult = (result) => {
+  // 情况 1：request 拦截器已经直接返回字符串
+  if (typeof result === 'string') {
+    return result
+  }
+
+  // 情况 2：RuoYi 常见返回：{ code: 200, msg: '操作成功', data: '/xxx' }
+  if (typeof result?.data === 'string') {
+    return result.data
+  }
+
+  // 情况 3：axios 原始返回：{ data: { code: 200, data: '/xxx' } }
+  if (typeof result?.data?.data === 'string') {
+    return result.data.data
+  }
+
+  return ''
+}
+
+/** 拼接下载地址 */
+const buildDownloadUrl = (url) => {
+  if (!url) return ''
+
+  // 已经是完整地址
+  if (/^(https?:)?\/\//.test(url)) {
+    return url
+  }
+
+  const baseApi = import.meta.env.VITE_APP_BASE_API || ''
+
+  return `${baseApi.replace(/\/$/, '')}/${url.replace(/^\//, '')}`
+}
+
+/** 使用浏览器原生 GET 下载 */
+const triggerNativeDownload = (url) => {
+  const downloadUrl = buildDownloadUrl(url)
+
+  // 最稳：直接让浏览器访问下载地址
+  window.location.href = downloadUrl
 }
 
 /** 下载详情中的文件 */
@@ -2830,43 +3418,25 @@ const handleDownloadDetailFile = async (row, options = {}) => {
   }
 
   try {
-    const data = await downloadData({
-      id: row.id,
-      experimentId: row?.experimentId,
-      dataFilePath: row?.dataFilePath
+    const result = await getDownloadUrl({
+      id: row.id
     })
 
-    if (blobValidate(data)) {
-      let fileName =
-        row.fileName ||
-        row.name ||
-        row.dataName ||
-        row?.dataFilePath?.split(/[\\/]/).pop() ||
-        'download'
+    const downloadUrl = getUrlFromResult(result)
 
-      // 如果是文件夹下载，强制补 .zip
-      if (!fileName.toLowerCase().endsWith('.zip')) {
-        fileName += '.zip'
-      }
-
-      saveAs(
-        new Blob([data], { type: 'application/zip' }),
-        fileName
-      )
-
-      return true
+    if (!downloadUrl) {
+      if (!silent) ElMessage.error('下载失败：未获取到下载地址')
+      return false
     }
 
-    const resText = await data.text()
-    const rspObj = JSON.parse(resText)
-
-    if (!silent) ElMessage.error(rspObj.msg || '下载失败')
-    return false
+    triggerNativeDownload(downloadUrl)
+    return true
   } catch (e) {
     if (!silent) ElMessage.error('下载失败: ' + (e.message || '未知错误'))
     return false
   }
 }
+
 // --- 文件管理器逻辑结束 ---
 
 function transformTreeData(data) {

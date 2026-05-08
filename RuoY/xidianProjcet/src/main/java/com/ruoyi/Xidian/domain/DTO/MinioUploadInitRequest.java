@@ -16,4 +16,14 @@ public class MinioUploadInitRequest {
     private String businessType;
 
     private String businessId;
+
+    private String relativePath;
+
+    private String folderName;
+
+    private String folderUploadId;
+
+    private String folderUploadDate;
+
+    private Boolean isFolder;
 }

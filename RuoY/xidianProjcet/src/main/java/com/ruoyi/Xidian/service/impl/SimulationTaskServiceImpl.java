@@ -25,14 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
-import java.util.Collections;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -98,6 +91,7 @@ public class SimulationTaskServiceImpl implements SimulationTaskService
 
         List<TaskDataGroup> subTasks = buildSubTasks(task.getId(), request);
         log.info("Built sub tasks, taskId={}, subTaskCount={}", task.getId(), subTasks.size());
+        Set<String> hashTable = new HashSet<>();
         for (TaskDataGroup group : subTasks)
         {
             if (!Boolean.TRUE.equals(group.getEnabled()))
@@ -115,6 +109,10 @@ public class SimulationTaskServiceImpl implements SimulationTaskService
                 taskMapper.deleteById(task.getId());
                 throw new ServiceException("target number must be at least 3");
             }
+            if(hashTable.contains(group.getDataName() + "." + group.getOutputType())){
+                throw new ServiceException("文件名称重复，存在覆盖风险");
+            }
+            hashTable.add(group.getDataName() + "." + group.getOutputType());
         }
 
         List<TaskDataGroup> enabledSubTasks = filterEnabledSubTasks(subTasks);

@@ -111,11 +111,76 @@ export function initiateBusinessDataUpload(data, config = {}) {
   })
 }
 
+export function initiateBusinessFolderUpload(data, config = {}) {
+  return request({
+    url: '/minio/direct-upload/folder/initiate',
+    method: 'post',
+    data,
+    ...config
+  })
+}
+
 export function completeBusinessDataUpload(data, config = {}) {
   return request({
     url: '/minio/direct-upload/complete',
     method: 'post',
     data,
+    ...config
+  })
+}
+
+export function completeBusinessFolderUpload(data, config = {}) {
+  return request({
+    url: '/data/bussiness/folder/complete',
+    method: 'post',
+    data,
+    timeout: config.timeout ?? 60 * 60 * 1000,
+    ...config
+  })
+}
+
+export function initBusinessMultipartUpload(data, config = {}) {
+  return request({
+    url: '/minio/direct-upload/multipart/init',
+    method: 'post',
+    data,
+    ...config
+  })
+}
+
+export function getBusinessMultipartPartUploadUrl(data, config = {}) {
+  return request({
+    url: '/minio/direct-upload/multipart/part/url',
+    method: 'post',
+    data,
+    ...config
+  })
+}
+
+export function reportBusinessMultipartPart(data, config = {}) {
+  return request({
+    url: '/minio/direct-upload/multipart/part/complete',
+    method: 'post',
+    data,
+    ...config
+  })
+}
+
+export function completeBusinessMultipartUpload(data, config = {}) {
+  return request({
+    url: '/minio/direct-upload/multipart/complete',
+    method: 'post',
+    data,
+    ...config
+  })
+}
+
+export function completeBusinessDirectUpload(data, config = {}) {
+  return request({
+    url: '/data/bussiness/direct/complete',
+    method: 'post',
+    data,
+    timeout: config.timeout ?? 60 * 60 * 1000,
     ...config
   })
 }
@@ -137,11 +202,10 @@ export function previewFile(url, config = {}) {
   })
 }
 
-export function downloadData(data) {
+export function getDownloadUrl(data) {
   return request({
-    url: '/data/bussiness/download',
+    url: '/data/bussiness/download/url',
     method: 'post',
-    data: data,
-    responseType: 'blob'
+    data
   })
 }

@@ -14,4 +14,8 @@ public class MinioUploadInitResponse {
     private Long fileSize;
     private String businessType;
     private String businessId;
+    private boolean exists;
+    private boolean needUpload;
+    private String status;
+    private String etag;
 }

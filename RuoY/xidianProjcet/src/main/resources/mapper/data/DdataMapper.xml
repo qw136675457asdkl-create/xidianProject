@@ -74,7 +74,7 @@
         sample_frequency = #{sampleFrequency},
         work_status = #{workStatus},
         ext_attr = #{extAttr},
-        is_simulation = #{isSimulation}
+        is_simulation = #{isSimulation},
         WHERE id = #{id}
     </update>
     <update id="updateDdataInfos" parameterType="java.util.List">

@@ -3,22 +3,21 @@ package com.ruoyi.Xidian.service;
 import com.ruoyi.Xidian.config.MinioProperties;
 import com.ruoyi.Xidian.domain.MdFileStorage;
 import com.ruoyi.common.exception.ServiceException;
+import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.common.utils.file.FileUtils;
 import io.minio.*;
 import io.minio.errors.*;
 import io.minio.http.Method;
 import io.minio.messages.DeleteError;
 import io.minio.messages.DeleteObject;
+import io.minio.messages.Item;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.URLConnection;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -35,8 +34,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-
 import static org.apache.commons.lang3.StringUtils.trimToNull;
+import static org.aspectj.util.FileUtil.copyStream;
 
 @Slf4j
 @Service
@@ -44,6 +43,7 @@ public class FileStorageService {
 
     private static final int DEFAULT_EXPIRE_SECONDS = 600;
     private static final int MAX_EXPIRE_SECONDS = 7 * 24 * 60 * 60;
+    private static final Set<String> OBJECT_NOT_FOUND_CODES = Set.of("NoSuchKey", "NoSuchObject", "NoSuchBucket", "NotFound");
     private final MinioClient minioClient;
     private final MinioProperties minioProperties;
 
@@ -252,7 +252,7 @@ public class FileStorageService {
         );
              OutputStream outputStream = response.getOutputStream()) {
 
-            String encodedFileName = URLEncoder.encode(originalFileName, StandardCharsets.UTF_8.name())
+            String encodedFileName = URLEncoder.encode(originalFileName, StandardCharsets.UTF_8)
                     .replaceAll("\\+", "%20");
 
             response.setContentType("application/octet-stream");
@@ -272,6 +272,193 @@ public class FileStorageService {
             log.error("MinIO 文件下载失败，objectName={}", objectName, e);
             throw new RuntimeException("文件下载失败：" + objectName, e);
         }
+    }
+
+    public void minioRangeDownload(String objectName, String originalFileName, HttpServletResponse response, HttpServletRequest request){
+        try {
+            StatObjectResponse stat = minioClient.statObject(StatObjectArgs.builder()
+                    .bucket(minioProperties.getBucket())
+                    .object(objectName)
+                    .build());
+            long fileSize = stat.size();
+            String contentType = StringUtils.isNotEmpty(stat.contentType())
+                    ? stat.contentType()
+                    : "application/octet-stream";
+            String rangeHeader = request.getHeader("Range");
+            RangeInfo rangeInfo = parseRange(rangeHeader, fileSize);
+            setCommonDownloadHeaders(response, originalFileName, contentType);
+            response.setHeader("Accept-Ranges", "bytes");
+            if (rangeInfo == null)
+            {
+                // 普通完整下载
+                response.setStatus(HttpServletResponse.SC_OK);
+                response.setHeader("Content-Length", String.valueOf(fileSize));
+
+                try (InputStream inputStream = minioClient.getObject(
+                        GetObjectArgs.builder()
+                                .bucket(minioProperties.getBucket())
+                                .object(objectName)
+                                .build()
+                ))
+                {
+                    copyStream(inputStream, response.getOutputStream());
+                }
+                return;
+            }
+            if (!rangeInfo.valid)
+            {
+                // Range 不合法
+                response.setStatus(HttpServletResponse.SC_REQUESTED_RANGE_NOT_SATISFIABLE);
+                response.setHeader("Content-Range", "bytes */" + fileSize);
+                return;
+            }
+            long start = rangeInfo.start;
+            long end = rangeInfo.end;
+            long contentLength = end - start + 1;
+
+            response.setStatus(HttpServletResponse.SC_PARTIAL_CONTENT);
+            response.setHeader("Content-Length", String.valueOf(contentLength));
+            response.setHeader(
+                    "Content-Range",
+                    "bytes " + start + "-" + end + "/" + fileSize
+            );
+            try (InputStream inputStream = minioClient.getObject(
+                    GetObjectArgs.builder()
+                            .bucket(minioProperties.getBucket())
+                            .object(objectName)
+                            .offset(start)
+                            .length(contentLength)
+                            .build()
+            ))
+            {
+                copyStream(inputStream, response.getOutputStream());
+            }
+        } catch (Exception e) {
+            throw new ServiceException("文件下载失败：" + e.getMessage());
+        }
+    }
+    private RangeInfo parseRange(String rangeHeader, long fileSize)
+    {
+        if (StringUtils.isEmpty(rangeHeader))
+        {
+            return null;
+        }
+
+        if (!rangeHeader.startsWith("bytes="))
+        {
+            return RangeInfo.invalid();
+        }
+
+        // 暂不支持多段 Range，例如 bytes=0-99,200-299
+        String rangeValue = rangeHeader.substring("bytes=".length()).trim();
+        if (rangeValue.contains(","))
+        {
+            return RangeInfo.invalid();
+        }
+
+        try
+        {
+            long start;
+            long end;
+
+            if (rangeValue.startsWith("-"))
+            {
+                // bytes=-500，表示最后 500 字节
+                long suffixLength = Long.parseLong(rangeValue.substring(1));
+                if (suffixLength <= 0)
+                {
+                    return RangeInfo.invalid();
+                }
+
+                if (suffixLength >= fileSize)
+                {
+                    start = 0;
+                }
+                else
+                {
+                    start = fileSize - suffixLength;
+                }
+
+                end = fileSize - 1;
+            }
+            else
+            {
+                String[] parts = rangeValue.split("-", -1);
+
+                start = Long.parseLong(parts[0]);
+
+                if (parts.length > 1 && StringUtils.isNotEmpty(parts[1]))
+                {
+                    end = Long.parseLong(parts[1]);
+                }
+                else
+                {
+                    end = fileSize - 1;
+                }
+            }
+
+            if (start < 0 || end < start || start >= fileSize)
+            {
+                return RangeInfo.invalid();
+            }
+
+            if (end >= fileSize)
+            {
+                end = fileSize - 1;
+            }
+
+            return RangeInfo.valid(start, end);
+        }
+        catch (Exception e)
+        {
+            return RangeInfo.invalid();
+        }
+    }
+
+    private static class RangeInfo
+    {
+        private final boolean valid;
+        private final long start;
+        private final long end;
+
+        private RangeInfo(boolean valid, long start, long end)
+        {
+            this.valid = valid;
+            this.start = start;
+            this.end = end;
+        }
+
+        public static RangeInfo valid(long start, long end)
+        {
+            return new RangeInfo(true, start, end);
+        }
+
+        public static RangeInfo invalid()
+        {
+            return new RangeInfo(false, 0, 0);
+        }
+    }
+
+    private void setCommonDownloadHeaders(
+            HttpServletResponse response,
+            String fileName,
+            String contentType) throws UnsupportedEncodingException
+    {
+        String encodedFileName = URLEncoder
+                .encode(fileName, StandardCharsets.UTF_8.name())
+                .replaceAll("\\+", "%20");
+
+        response.setContentType(contentType);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+
+        response.setHeader(
+                "Content-Disposition",
+                "attachment; filename=\"" + encodedFileName + "\"; filename*=UTF-8''" + encodedFileName
+        );
+
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        response.setHeader("Pragma", "no-cache");
+        response.setHeader("Expires", "0");
     }
 
     public void preview(String objectName, String originalFileName, String contentType, HttpServletResponse response) {
@@ -398,6 +585,113 @@ public class FileStorageService {
         }
     }
 
+    public boolean objectExists(String objectName) {
+        if (objectName == null || objectName.trim().isEmpty()) {
+            return false;
+        }
+        try {
+            minioClient.statObject(
+                    StatObjectArgs.builder()
+                            .bucket(getRequiredBucket())
+                            .object(objectName)
+                            .build()
+            );
+            return true;
+        } catch (ErrorResponseException ex) {
+            if (ex.errorResponse() != null && OBJECT_NOT_FOUND_CODES.contains(ex.errorResponse().code())) {
+                return false;
+            }
+            throw new RuntimeException("Failed to query object status: " + objectName, ex);
+        } catch (Exception ex) {
+            throw new RuntimeException("Failed to query object status: " + objectName, ex);
+        }
+    }
+
+    public boolean hasObjectsWithPrefix(String prefix) {
+        String normalizedPrefix = normalizeFolderPrefix(prefix);
+        try {
+            Iterable<Result<Item>> results = minioClient.listObjects(
+                    ListObjectsArgs.builder()
+                            .bucket(getRequiredBucket())
+                            .prefix(normalizedPrefix)
+                            .recursive(true)
+                            .build()
+            );
+            for (Result<Item> result : results) {
+                Item item = result.get();
+                if (item != null && !item.isDir()) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception ex) {
+            throw new RuntimeException("Failed to list folder objects: " + normalizedPrefix, ex);
+        }
+    }
+
+    public void downloadFolderAsZip(String folderObjectName, String folderName, HttpServletResponse response) {
+        String normalizedPrefix = normalizeFolderPrefix(folderObjectName);
+        String safeFolderName = normalizeObjectNameSegment(folderName);
+        if (safeFolderName.isEmpty()) {
+            safeFolderName = "folder";
+        }
+
+        String downloadFileName = safeFolderName + ".zip";
+        try (ZipOutputStream zipOutputStream = new ZipOutputStream(response.getOutputStream(), StandardCharsets.UTF_8)) {
+            String encodedFileName = URLEncoder.encode(downloadFileName, StandardCharsets.UTF_8)
+                    .replaceAll("\\+", "%20");
+            response.setContentType("application/zip");
+            response.setCharacterEncoding("UTF-8");
+            response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encodedFileName);
+
+            Iterable<Result<Item>> results = minioClient.listObjects(
+                    ListObjectsArgs.builder()
+                            .bucket(getRequiredBucket())
+                            .prefix(normalizedPrefix)
+                            .recursive(true)
+                            .build()
+            );
+
+            byte[] buffer = new byte[8192];
+            Set<String> usedEntryNames = new HashSet<>();
+            boolean hasContent = false;
+            for (Result<Item> result : results) {
+                Item item = result.get();
+                if (item == null || item.isDir() || item.objectName() == null) {
+                    continue;
+                }
+
+                String entryName = resolveListedFolderZipEntryName(item.objectName(), normalizedPrefix, safeFolderName, usedEntryNames);
+                if (entryName == null || entryName.trim().isEmpty()) {
+                    continue;
+                }
+
+                hasContent = true;
+                try (GetObjectResponse inputStream = minioClient.getObject(
+                        GetObjectArgs.builder()
+                                .bucket(getRequiredBucket())
+                                .object(item.objectName())
+                                .build()
+                )) {
+                    zipOutputStream.putNextEntry(new ZipEntry(entryName));
+                    int len;
+                    while ((len = inputStream.read(buffer)) != -1) {
+                        zipOutputStream.write(buffer, 0, len);
+                    }
+                    zipOutputStream.closeEntry();
+                }
+            }
+
+            if (!hasContent) {
+                throw new RuntimeException("Folder content does not exist");
+            }
+            zipOutputStream.finish();
+        } catch (Exception ex) {
+            log.error("MinIO folder download failed, folderObjectName={}", folderObjectName, ex);
+            throw new RuntimeException("Folder download failed", ex);
+        }
+    }
+
     public String createPresignedPutUrl(String objectName) {
         try {
             return minioClient.getPresignedObjectUrl(
@@ -482,6 +776,52 @@ public class FileStorageService {
         String normalizedRelativePath = normalizeFolderObjectRelativePath(relativePath, folderName);
         if (normalizedRelativePath.isEmpty()) {
             normalizedRelativePath = UUID.randomUUID().toString();
+        }
+
+        String entryName = folderName + "/" + normalizedRelativePath;
+        if (usedEntryNames.add(entryName)) {
+            return entryName;
+        }
+
+        String suffix = getExtension(entryName);
+        String baseName = suffix.isEmpty() ? entryName : entryName.substring(0, entryName.length() - suffix.length());
+        int index = 1;
+        String nextEntryName;
+        do {
+            nextEntryName = baseName + "(" + index + ")" + suffix;
+            index++;
+        } while (!usedEntryNames.add(nextEntryName));
+        return nextEntryName;
+    }
+
+    private String normalizeFolderPrefix(String prefix) {
+        String normalizedPrefix = prefix == null ? "" : prefix.trim().replace("\\", "/");
+        while (normalizedPrefix.startsWith("/")) {
+            normalizedPrefix = normalizedPrefix.substring(1);
+        }
+        if (!normalizedPrefix.endsWith("/")) {
+            normalizedPrefix = normalizedPrefix + "/";
+        }
+        return normalizedPrefix;
+    }
+
+    private String resolveListedFolderZipEntryName(String objectName,
+                                                   String folderPrefix,
+                                                   String folderName,
+                                                   Set<String> usedEntryNames) {
+        if (objectName == null || objectName.trim().isEmpty()) {
+            return null;
+        }
+
+        String normalizedObjectName = objectName.replace("\\", "/");
+        if (!normalizedObjectName.startsWith(folderPrefix)) {
+            return null;
+        }
+
+        String relativePath = normalizedObjectName.substring(folderPrefix.length());
+        String normalizedRelativePath = normalizeFolderObjectRelativePath(relativePath, folderName);
+        if (normalizedRelativePath.isEmpty()) {
+            return null;
         }
 
         String entryName = folderName + "/" + normalizedRelativePath;
